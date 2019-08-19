@@ -99,6 +99,7 @@ class CORE_EXPORT QgsRasterDataProvider : public QgsDataProvider, public QgsRast
       NoProviderCapabilities = 0,       //!< Provider has no capabilities
       ReadLayerMetadata = 1 << 1, //!< Provider can read layer metadata from data store. Since QGIS 3.0. See QgsDataProvider::layerMetadata()
       WriteLayerMetadata = 1 << 2, //!< Provider can write layer metadata to the data store. Since QGIS 3.0. See QgsDataProvider::writeLayerMetadata()
+      ProviderHintBenefitsFromResampling = 1 << 3 //!< Provider benefits from resampling and should apply user default resampling settings (since QGIS 3.10)
     };
 
     //! Provider capabilities
@@ -526,6 +527,24 @@ class CORE_EXPORT QgsRasterDataProvider : public QgsDataProvider, public QgsRast
      * \since QGIS 3.0
      */
     virtual int stepHeight() const { return QgsRasterIterator::DEFAULT_MAXIMUM_TILE_HEIGHT; }
+
+    /**
+     * Returns a list of native resolutions if available, i.e. map units per pixel at which the raster source
+     * was originally created.
+     *
+     * Resolutions are calculated in the provider's crs().
+     *
+     * \since QGIS 3.8.0
+     */
+    virtual QList< double > nativeResolutions() const;
+
+    /**
+     * Returns true if the extents reported by the data provider are not reliable
+     * and it's possible that there is renderable content outside of these extents.
+     *
+     * \since QGIS 3.10.0
+     */
+    virtual bool ignoreExtents() const;
 
   signals:
 

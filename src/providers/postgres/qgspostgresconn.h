@@ -43,7 +43,8 @@ enum QgsPostgresGeometryColumnType
   SctGeometry,
   SctGeography,
   SctTopoGeometry,
-  SctPcPatch
+  SctPcPatch,
+  SctRaster
 };
 
 enum QgsPostgresPrimaryKeyType
@@ -81,12 +82,13 @@ struct QgsPostgresLayerProperty
   QString                       relKind;
   bool                          isView = false;
   bool                          isMaterializedView = false;
+  bool                          isRaster = false;
   QString                       tableComment;
 
   // TODO: rename this !
   int size() const { Q_ASSERT( types.size() == srids.size() ); return types.size(); }
 
-  QString   defaultName() const
+  QString defaultName() const
   {
     QString n = tableName;
     if ( nSpCols > 1 ) n += '.' + geometryColName;
@@ -101,17 +103,18 @@ struct QgsPostgresLayerProperty
 
     property.types << types[ i ];
     property.srids << srids[ i ];
-    property.schemaName      = schemaName;
-    property.tableName       = tableName;
-    property.geometryColName = geometryColName;
-    property.geometryColType = geometryColType;
-    property.pkCols          = pkCols;
-    property.nSpCols         = nSpCols;
-    property.sql             = sql;
-    property.relKind         = relKind;
-    property.isView          = isView;
+    property.schemaName         = schemaName;
+    property.tableName          = tableName;
+    property.geometryColName    = geometryColName;
+    property.geometryColType    = geometryColType;
+    property.pkCols             = pkCols;
+    property.nSpCols            = nSpCols;
+    property.sql                = sql;
+    property.relKind            = relKind;
+    property.isView             = isView;
+    property.isRaster           = isRaster;
     property.isMaterializedView = isMaterializedView;
-    property.tableComment    = tableComment;
+    property.tableComment       = tableComment;
 
     return property;
   }
@@ -169,8 +172,8 @@ class QgsPostgresResult
 
     int PQnfields();
     QString PQfname( int col );
-    int PQftable( int col );
-    int PQftype( int col );
+    Oid PQftable( int col );
+    Oid PQftype( int col );
     int PQfmod( int col );
     int PQftablecol( int col );
     Oid PQoidValue();
@@ -209,6 +212,9 @@ class QgsPostgresConn : public QObject
 
     //! Gets status of Pointcloud capability
     bool hasPointcloud();
+
+    //! Gets status of Raster capability
+    bool hasRaster();
 
     //! Gets status of GIST capability
     bool hasGIST();
@@ -282,6 +288,12 @@ class QgsPostgresConn : public QObject
      * Quote a value for placement in a SQL string.
      */
     static QString quotedValue( const QVariant &value );
+
+    /**
+     * Quote a json(b) value for placement in a SQL string.
+     * \note a null value will be represented as a NULL and not as a json null.
+     */
+    static QString quotedJsonValue( const QVariant &value );
 
     /**
      * Gets the list of supported layers
@@ -402,6 +414,9 @@ class QgsPostgresConn : public QObject
 
     //! pointcloud support available
     bool mPointcloudAvailable;
+
+    //! raster support available
+    bool mRasterAvailable;
 
     //! encode wkb in hex
     bool mUseWkbHex;

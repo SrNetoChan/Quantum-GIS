@@ -117,6 +117,11 @@ void QgsLayoutItemMapItem::setStackingLayer( QgsMapLayer *layer )
   mStackingLayer.setLayer( layer );
 }
 
+bool QgsLayoutItemMapItem::accept( QgsStyleEntityVisitorInterface * ) const
+{
+  return true;
+}
+
 //
 // QgsLayoutItemMapItemStack
 //
@@ -271,6 +276,18 @@ bool QgsLayoutItemMapItemStack::containsAdvancedEffects() const
   for ( QgsLayoutItemMapItem *item : mItems )
   {
     if ( item->enabled() && item->usesAdvancedEffects() )
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool QgsLayoutItemMapItemStack::hasEnabledItems() const
+{
+  for ( QgsLayoutItemMapItem *item : mItems )
+  {
+    if ( item->enabled() )
     {
       return true;
     }

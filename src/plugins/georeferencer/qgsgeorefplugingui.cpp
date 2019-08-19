@@ -33,6 +33,7 @@
 #include "qgssettings.h"
 #include "qgisinterface.h"
 #include "qgsapplication.h"
+#include "qgsgui.h"
 
 #include "qgslayout.h"
 #include "qgslayoutitemlabel.h"
@@ -84,9 +85,7 @@ QgsGeorefPluginGui::QgsGeorefPluginGui( QgisInterface *qgisInterface, QWidget *p
   , mLoadInQgis( false )
 {
   setupUi( this );
-
-  QgsSettings s;
-  restoreGeometry( s.value( QStringLiteral( "/Plugin-GeoReferencer/Window/geometry" ) ).toByteArray() );
+  QgsGui::instance()->enableAutoGeometryRestore( this );
 
   QWidget *centralWidget = this->centralWidget();
   mCentralLayout = new QGridLayout( centralWidget );
@@ -116,7 +115,8 @@ QgsGeorefPluginGui::QgsGeorefPluginGui( QgisInterface *qgisInterface, QWidget *p
 
   connect( mIface, &QgisInterface::currentThemeChanged, this, &QgsGeorefPluginGui::updateIconTheme );
 
-  if ( s.value( QStringLiteral( "/Plugin-GeoReferencer/Config/ShowDocked" ) ).toBool() )
+  QgsSettings settings;
+  if ( settings.value( QStringLiteral( "/Plugin-GeoReferencer/Config/ShowDocked" ) ).toBool() )
   {
     dockThisWindow( true );
   }
@@ -145,9 +145,6 @@ void QgsGeorefPluginGui::dockThisWindow( bool dock )
 
 QgsGeorefPluginGui::~QgsGeorefPluginGui()
 {
-  QgsSettings settings;
-  settings.setValue( QStringLiteral( "Plugin-GeoReferencer/Window/geometry" ), saveGeometry() );
-
   clearGCPData();
 
   removeOldLayer();
@@ -690,7 +687,7 @@ void QgsGeorefPluginGui::localHistogramStretch()
 // Info slots
 void QgsGeorefPluginGui::showHelp()
 {
-  QgsHelp::openHelp( QStringLiteral( "plugins/plugins_georeferencer.html#defining-the-transformation-settings" ) );
+  QgsHelp::openHelp( QStringLiteral( "plugins/core_plugins/plugins_georeferencer.html#defining-the-transformation-settings" ) );
 }
 
 // Comfort slots

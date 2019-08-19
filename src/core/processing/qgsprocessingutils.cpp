@@ -686,7 +686,12 @@ QVariant QgsProcessingUtils::generateIteratingDestination( const QVariant &input
   else
   {
     QString res = input.toString();
-    if ( res.startsWith( QLatin1String( "memory:" ) ) )
+    if ( res == QgsProcessing::TEMPORARY_OUTPUT )
+    {
+      // temporary outputs map to temporary outputs!
+      return QgsProcessing::TEMPORARY_OUTPUT;
+    }
+    else if ( res.startsWith( QLatin1String( "memory:" ) ) )
     {
       return res + '_' + id.toString();
     }
@@ -784,7 +789,7 @@ QString QgsProcessingUtils::convertToCompatibleFormat( const QgsVectorLayer *vl,
   // if the data provider is NOT ogr, then we HAVE to convert. Otherwise we run into
   // issues with data providers like spatialite, delimited text where the format can be
   // opened outside of QGIS, but with potentially very different behavior!
-  requiresTranslation = requiresTranslation || vl->dataProvider()->name() != QLatin1String( "ogr" );
+  requiresTranslation = requiresTranslation || vl->providerType() != QLatin1String( "ogr" );
 
   // if the layer has a feature filter set, then we HAVE to convert. Feature filters are
   // a purely QGIS concept.
@@ -794,7 +799,7 @@ QString QgsProcessingUtils::convertToCompatibleFormat( const QgsVectorLayer *vl,
   QString diskPath;
   if ( !requiresTranslation )
   {
-    const QVariantMap parts = QgsProviderRegistry::instance()->decodeUri( vl->dataProvider()->name(), vl->source() );
+    const QVariantMap parts = QgsProviderRegistry::instance()->decodeUri( vl->providerType(), vl->source() );
     if ( parts.contains( QStringLiteral( "path" ) ) )
     {
       diskPath = parts.value( QStringLiteral( "path" ) ).toString();

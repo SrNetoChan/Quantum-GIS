@@ -42,7 +42,7 @@ class QgsQlrDataItemProvider : public QgsDataItemProvider
 {
   public:
     QString name() override;
-    int capabilities() override;
+    int capabilities() const override;
     QgsDataItem *createDataItem( const QString &path, QgsDataItem *parentItem ) override;
 };
 
@@ -84,7 +84,7 @@ class QgsQptDataItemProvider : public QgsDataItemProvider
 {
   public:
     QString name() override;
-    int capabilities() override;
+    int capabilities() const override;
     QgsDataItem *createDataItem( const QString &path, QgsDataItem *parentItem ) override;
 };
 
@@ -129,7 +129,7 @@ class QgsPyDataItemProvider : public QgsDataItemProvider
 {
   public:
     QString name() override;
-    int capabilities() override;
+    int capabilities() const override;
     QgsDataItem *createDataItem( const QString &path, QgsDataItem *parentItem ) override;
 };
 
@@ -176,7 +176,7 @@ class QgsStyleXmlDataItemProvider : public QgsDataItemProvider
 {
   public:
     QString name() override;
-    int capabilities() override;
+    int capabilities() const override;
     QgsDataItem *createDataItem( const QString &path, QgsDataItem *parentItem ) override;
 };
 
@@ -200,6 +200,7 @@ class QgsStyleXmlDropHandler : public QgsCustomDropHandler
  */
 class APP_EXPORT QgsProjectRootDataItem : public QgsProjectItem
 {
+    Q_OBJECT
   public:
 
     /**
@@ -215,6 +216,7 @@ class APP_EXPORT QgsProjectRootDataItem : public QgsProjectItem
  */
 class APP_EXPORT QgsProjectLayerTreeGroupItem : public QgsDataCollectionItem
 {
+    Q_OBJECT
   public:
 
     /**
@@ -233,7 +235,7 @@ class APP_EXPORT QgsProjectDataItemProvider : public QgsDataItemProvider
 {
   public:
     QString name() override;
-    int capabilities() override;
+    int capabilities() const override;
     QgsDataItem *createDataItem( const QString &path, QgsDataItem *parentItem ) override;
 };
 

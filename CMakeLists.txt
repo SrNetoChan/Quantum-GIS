@@ -14,7 +14,7 @@ SET(CMAKE_LINK_DEPENDS_NO_SHARED ON)
 #############################################################
 # Project and version
 SET(CPACK_PACKAGE_VERSION_MAJOR "3")
-SET(CPACK_PACKAGE_VERSION_MINOR "7")
+SET(CPACK_PACKAGE_VERSION_MINOR "9")
 SET(CPACK_PACKAGE_VERSION_PATCH "0")
 SET(COMPLETE_VERSION ${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH})
 SET(RELEASE_NAME "Master")
@@ -176,6 +176,14 @@ IF(WITH_CORE)
     MESSAGE(FATAL_ERROR "Desktop cannot be built without analysis")
   ENDIF()
 
+  IF ( WITH_DESKTOP )
+    # The qgis_desktop target is meant to build a minimal but complete running QGIS during development
+    # This should help to reduce compile time while still having a "complete enough" QGIS for most of the development
+    ADD_CUSTOM_TARGET(qgis_desktop
+    	DEPENDS qgis qgispython pycore pygui pyanalysis postgresprovider staged-plugins pyplugin-installer
+    )
+  ENDIF ()
+
   # try to configure and build MDAL support
   SET (WITH_INTERNAL_MDAL TRUE CACHE BOOL "Determines whether MDAL support should be built")
   IF (NOT WITH_INTERNAL_MDAL)
@@ -227,7 +235,7 @@ IF(WITH_CORE)
     # https://sourceforge.net/p/mingw-w64/bugs/527/
     # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=80816
 
-    # also OpenBSD has no thread_local support, see https://issues.qgis.org/issues/17351
+    # also OpenBSD has no thread_local support, see https://github.com/qgis/QGIS/issues/25248
 
   ELSE (MINGW OR CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
     IF (WITH_THREAD_LOCAL)
@@ -492,6 +500,7 @@ IF (PEDANTIC)
     SET(_warnings "${_warnings} /wd4231 ")  # nonstandard extension used : 'identifier' before template explicit instantiation (used in Qt template classes)
     SET(_warnings "${_warnings} /wd4244 ")  # conversion from '...' to '...' possible loss of data
     SET(_warnings "${_warnings} /wd4251 ")  # needs to have dll-interface to be used by clients of class (occurs in Qt template classes)
+    SET(_warnings "${_warnings} /wd4267 ")  # 'argument': conversion from 'size_t' to 'int', possible loss of data
     SET(_warnings "${_warnings} /wd4275 ")  # non dll-interface class '...' used as base for dll-interface class '...'
     SET(_warnings "${_warnings} /wd4290 ")  # c++ exception specification ignored except to indicate a function is not __declspec(nothrow) (occurs in sip generated bindings)
     SET(_warnings "${_warnings} /wd4456 ")  # declaration of '...' hides previous local declaration

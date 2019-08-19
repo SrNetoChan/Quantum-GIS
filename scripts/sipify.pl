@@ -190,7 +190,7 @@ sub processDoxygenLine {
 
     # if inside multi-line parameter, ensure additional lines are indented
     if ($line ne '') {
-        if ( $line !~ m/^\s*[\\:]+(param|note|since|return|deprecated|warning)/ ) {
+        if ( $line !~ m/^\s*[\\:]+(param|note|since|return|deprecated|warning|throws)/ ) {
             $line = "$INDENT$line";
         }
     }
@@ -299,6 +299,11 @@ sub processDoxygenLine {
         $COMMENT_LAST_LINE_NOTE_WARNING = 1;
         return "\n.. warning::\n\n   $1\n";
     }
+    if ( $line =~ m/[\\@]throws (.+?)\b\s*(.*)/ ) {
+        $INDENT = '';
+        $COMMENT_LAST_LINE_NOTE_WARNING = 1;
+        return "\n:raises $1: $2\n";
+    }
 
     if ( $line !~ m/^\s*$/ ){
         if ( $COMMENT_LAST_LINE_NOTE_WARNING == 1 ){
@@ -405,6 +410,7 @@ sub fix_annotations {
     $line =~ s/\bSIP_TRANSFER\b/\/Transfer\//g;
     $line =~ s/\bSIP_TRANSFERBACK\b/\/TransferBack\//;
     $line =~ s/\bSIP_TRANSFERTHIS\b/\/TransferThis\//;
+    $line =~ s/\bSIP_GETWRAPPER\b/\/GetWrapper\//;
 
     $line =~ s/SIP_PYNAME\(\s*(\w+)\s*\)/\/PyName=$1\//;
     $line =~ s/SIP_TYPEHINT\(\s*(\w+)\s*\)/\/TypeHint="$1"\//;
@@ -990,17 +996,18 @@ while ($LINE_IDX < $LINE_COUNT){
                     my $enum_member = $+{em};
                     my $comment = $+{co};
                     dbg_info("is_scope_based:$is_scope_based enum_mk_base:$enum_mk_base monkeypatch:$monkeypatch");
-                    if ($is_scope_based eq "1") {
-                        if ( $monkeypatch eq 1 ){
-                            if ($enum_mk_base ne "") {
-                                push @OUTPUT_PYTHON, "$enum_mk_base.$enum_member = $enum_qualname.$enum_member\n";
-                                push @OUTPUT_PYTHON, "$enum_mk_base.$enum_member.__doc__ = \"$comment\"\n" ;
-                                push @enum_members_doc, "'* ``$enum_member``: ' + $enum_qualname.$enum_member.__doc__";
-                            } else {
+                    if ($is_scope_based eq "1" and $enum_member ne "") {
+                        if ( $monkeypatch eq 1 and $enum_mk_base ne ""){
+		                    push @OUTPUT_PYTHON, "$enum_mk_base.$enum_member = $enum_qualname.$enum_member\n";
+		                    push @OUTPUT_PYTHON, "$enum_mk_base.$enum_member.__doc__ = \"$comment\"\n" ;
+		                    push @enum_members_doc, "'* ``$enum_member``: ' + $enum_qualname.$enum_member.__doc__";
+                        } else {
+                            if ( $monkeypatch eq 1 )
+                            {
                                 push @OUTPUT_PYTHON, "$ACTUAL_CLASS.$enum_member = $ACTUAL_CLASS.$enum_qualname.$enum_member\n";
-                                push @OUTPUT_PYTHON, "$ACTUAL_CLASS.$enum_qualname.$enum_member.__doc__ = \"$comment\"\n";
-                                push @enum_members_doc, "'* ``$enum_member``: ' + $ACTUAL_CLASS.$enum_qualname.$enum_member.__doc__";
                             }
+                            push @OUTPUT_PYTHON, "$ACTUAL_CLASS.$enum_qualname.$enum_member.__doc__ = \"$comment\"\n";
+                            push @enum_members_doc, "'* ``$enum_member``: ' + $ACTUAL_CLASS.$enum_qualname.$enum_member.__doc__";
                         }
                     }
                     $enum_decl = fix_annotations($enum_decl);

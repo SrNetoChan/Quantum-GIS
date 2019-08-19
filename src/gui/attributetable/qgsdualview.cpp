@@ -332,7 +332,7 @@ void QgsDualView::initModels( QgsMapCanvas *mapCanvas, const QgsFeatureRequest &
   mFilterModel = new QgsAttributeTableFilterModel( mapCanvas, mMasterModel, mMasterModel );
 
   // The following connections to invalidate() are necessary to keep the filter model in sync
-  // see regression https://issues.qgis.org/issues/15974
+  // see regression https://github.com/qgis/QGIS/issues/23890
   connect( mMasterModel, &QgsAttributeTableModel::rowsRemoved, mFilterModel, &QgsAttributeTableFilterModel::invalidate );
   connect( mMasterModel, &QgsAttributeTableModel::rowsInserted, mFilterModel, &QgsAttributeTableFilterModel::invalidate );
 
@@ -447,24 +447,27 @@ void QgsDualView::updateEditSelectionProgress( int progress, int count )
 void QgsDualView::panOrZoomToFeature( const QgsFeatureIds &featureset )
 {
   QgsMapCanvas *canvas = mFilterModel->mapCanvas();
-  if ( canvas )
+  if ( canvas && view() == AttributeEditor && featureset != mLastFeatureSet )
   {
-    if ( mAutoPanButton->isChecked() )
-      QTimer::singleShot( 0, this, [ = ]()
+    if ( filterMode() != QgsAttributeTableFilterModel::ShowVisible )
     {
-      canvas->panToFeatureIds( mLayer, featureset, false );
-    } );
-    else if ( mAutoZoomButton->isChecked() )
-      QTimer::singleShot( 0, this, [ = ]()
-    {
-      canvas->zoomToFeatureIds( mLayer, featureset );
-    } );
-
+      if ( mAutoPanButton->isChecked() )
+        QTimer::singleShot( 0, this, [ = ]()
+      {
+        canvas->panToFeatureIds( mLayer, featureset, false );
+      } );
+      else if ( mAutoZoomButton->isChecked() )
+        QTimer::singleShot( 0, this, [ = ]()
+      {
+        canvas->zoomToFeatureIds( mLayer, featureset );
+      } );
+    }
     if ( mFlashButton->isChecked() )
       QTimer::singleShot( 0, this, [ = ]()
     {
       canvas->flashFeatureIds( mLayer, featureset );
     } );
+    mLastFeatureSet = featureset;
   }
 }
 

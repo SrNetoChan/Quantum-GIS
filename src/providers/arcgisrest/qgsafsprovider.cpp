@@ -24,13 +24,9 @@
 #include "qgsdataitemprovider.h"
 #include "qgsapplication.h"
 
-#ifdef HAVE_GUI
-#include "qgsafssourceselect.h"
-#include "qgssourceselectprovider.h"
-#endif
+const QString QgsAfsProvider::AFS_PROVIDER_KEY = QStringLiteral( "arcgisfeatureserver" );
+const QString QgsAfsProvider::AFS_PROVIDER_DESCRIPTION = QStringLiteral( "ArcGIS Feature Server data provider" );
 
-static const QString TEXT_PROVIDER_KEY = QStringLiteral( "arcgisfeatureserver" );
-static const QString TEXT_PROVIDER_DESCRIPTION = QStringLiteral( "ArcGIS Feature Server data provider" );
 
 QgsAfsProvider::QgsAfsProvider( const QString &uri, const ProviderOptions &options )
   : QgsVectorDataProvider( uri, options )
@@ -145,6 +141,24 @@ QgsAfsProvider::QgsAfsProvider( const QString &uri, const ProviderOptions &optio
       continue;
     }
     QgsField field( fieldName, type, fieldDataMap[QStringLiteral( "type" )].toString(), fieldDataMap[QStringLiteral( "length" )].toInt() );
+
+    if ( fieldDataMap.contains( QStringLiteral( "domain" ) ) && fieldDataMap.value( QStringLiteral( "domain" ) ).toMap().value( QStringLiteral( "type" ) ).toString() == QStringLiteral( "codedValue" ) )
+    {
+      const QVariantList values = fieldDataMap.value( QStringLiteral( "domain" ) ).toMap().value( QStringLiteral( "codedValues" ) ).toList();
+      QVariantList valueConfig;
+      valueConfig.reserve( values.count() );
+      for ( const QVariant &v : values )
+      {
+        const QVariantMap value = v.toMap();
+        QVariantMap config;
+        config[ value.value( QStringLiteral( "name" ) ).toString() ] = value.value( QStringLiteral( "code" ) );
+        valueConfig.append( config );
+      }
+      QVariantMap editorConfig;
+      editorConfig.insert( QStringLiteral( "map" ), valueConfig );
+      field.setEditorWidgetSetup( QgsEditorWidgetSetup( QStringLiteral( "ValueMap" ), editorConfig ) );
+    }
+
     mSharedData->mFields.append( field );
   }
   if ( objectIdFieldName.isEmpty() )
@@ -156,8 +170,16 @@ QgsAfsProvider::QgsAfsProvider( const QString &uri, const ProviderOptions &optio
   mSharedData->mGeometryType = QgsArcGisRestUtils::mapEsriGeometryType( layerData[QStringLiteral( "geometryType" )].toString() );
   if ( mSharedData->mGeometryType == QgsWkbTypes::Unknown )
   {
-    appendError( QgsErrorMessage( tr( "Failed to determine geometry type" ), QStringLiteral( "AFSProvider" ) ) );
-    return;
+    if ( layerData.value( QStringLiteral( "serviceDataType" ) ).toString().startsWith( QLatin1String( "esriImageService" ) ) )
+    {
+      // it's possible to connect to ImageServers as a feature service, to view tile boundaries
+      mSharedData->mGeometryType = QgsWkbTypes::Polygon;
+    }
+    else
+    {
+      appendError( QgsErrorMessage( tr( "Failed to determine geometry type" ), QStringLiteral( "AFSProvider" ) ) );
+      return;
+    }
   }
   mSharedData->mGeometryType = QgsWkbTypes::zmType( mSharedData->mGeometryType, hasZ, hasM );
 
@@ -285,12 +307,12 @@ QgsRectangle QgsAfsProvider::extent() const
 
 QString QgsAfsProvider::name() const
 {
-  return TEXT_PROVIDER_KEY;
+  return AFS_PROVIDER_KEY;
 }
 
 QString QgsAfsProvider::description() const
 {
-  return TEXT_PROVIDER_DESCRIPTION;
+  return AFS_PROVIDER_DESCRIPTION;
 }
 
 QString QgsAfsProvider::dataComment() const
@@ -320,54 +342,38 @@ bool QgsAfsProvider::renderInPreview( const QgsDataProvider::PreviewContext & )
   return false;
 }
 
-#ifdef HAVE_GUI
 
-//! Provider for AFS layers source select
-class QgsAfsSourceSelectProvider : public QgsSourceSelectProvider
+QgsAfsProviderMetadata::QgsAfsProviderMetadata():
+  QgsProviderMetadata( QgsAfsProvider::AFS_PROVIDER_KEY, QgsAfsProvider::AFS_PROVIDER_DESCRIPTION )
 {
-  public:
-
-    QString providerKey() const override { return TEXT_PROVIDER_KEY; }
-    QString text() const override { return QObject::tr( "ArcGIS Feature Server" ); }
-    int ordering() const override { return QgsSourceSelectProvider::OrderRemoteProvider + 150; }
-    QIcon icon() const override { return QgsApplication::getThemeIcon( QStringLiteral( "/mActionAddAfsLayer.svg" ) ); }
-    QgsAbstractDataSourceWidget *createDataSourceWidget( QWidget *parent = nullptr, Qt::WindowFlags fl = Qt::Widget, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::Embedded ) const override
-    {
-      return new QgsAfsSourceSelect( parent, fl, widgetMode );
-    }
-};
-
-
-QGISEXTERN QList<QgsSourceSelectProvider *> *sourceSelectProviders()
-{
-  QList<QgsSourceSelectProvider *> *providers = new QList<QgsSourceSelectProvider *>();
-
-  *providers
-      << new QgsAfsSourceSelectProvider;
-
-  return providers;
 }
 
-QGISEXTERN QList<QgsDataItemProvider *> *dataItemProviders()
+QList<QgsDataItemProvider *> QgsAfsProviderMetadata::dataItemProviders() const
 {
-  QList<QgsDataItemProvider *> *providers = new QList<QgsDataItemProvider *>();
+  QList<QgsDataItemProvider *> providers;
 
-  *providers
+  providers
       << new QgsAfsDataItemProvider;
 
   return providers;
 }
 
-#ifdef HAVE_GUI
-QGISEXTERN QList<QgsDataItemGuiProvider *> *dataItemGuiProviders()
+QVariantMap QgsAfsProviderMetadata::decodeUri( const QString &uri )
 {
-  QList<QgsDataItemGuiProvider *> *providers = new QList<QgsDataItemGuiProvider *>();
+  QgsDataSourceUri dsUri = QgsDataSourceUri( uri );
 
-  *providers
-      << new QgsAfsItemGuiProvider();
-
-  return providers;
+  QVariantMap components;
+  components.insert( QStringLiteral( "url" ), dsUri.param( QStringLiteral( "url" ) ) );
+  return components;
 }
-#endif
 
-#endif
+QgsAfsProvider *QgsAfsProviderMetadata::createProvider( const QString &uri, const QgsDataProvider::ProviderOptions &options )
+{
+  return new QgsAfsProvider( uri, options );
+}
+
+
+QGISEXTERN QgsProviderMetadata *providerMetadataFactory()
+{
+  return new QgsAfsProviderMetadata();
+}

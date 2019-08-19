@@ -38,6 +38,7 @@ class TestQgsJsonUtils : public QObject
   private slots:
     void testStringList();
     void testJsonArray();
+    void testParseJson();
     void testIntList();
     void testDoubleList();
     void testExportAttributesJson_data();
@@ -91,6 +92,8 @@ void TestQgsJsonUtils::testJsonArray()
   // Empty
   QCOMPARE( QgsJsonUtils::parseArray( R"([])", QVariant::Int ), QVariantList() );
   QCOMPARE( QgsJsonUtils::parseArray( "", QVariant::Int ), QVariantList() );
+  // Booleans
+  QCOMPARE( QgsJsonUtils::parseArray( "[true,false]", QVariant::Bool ), QVariantList() << true << false );
   // Nulls
   for ( const QVariant &value : QgsJsonUtils::parseArray( R"([null, null])" ) )
   {
@@ -104,6 +107,32 @@ void TestQgsJsonUtils::testJsonArray()
     QVERIFY( value.isValid() );
     QCOMPARE( value, QVariant( QVariant::Type::Double ) );
   }
+}
+
+void TestQgsJsonUtils::testParseJson()
+{
+  QStringList tests {{
+      "null",
+      "false",
+      "true",
+      "123",
+      "123.45",
+      R"j("a string")j",
+      "[1,2,3.4,null]",
+      R"j({"_bool":true,"_double":1234.45,"_int":123,"_list":[1,2,3.4,null],"_null":null,"_object":{"int":123}})j",
+    }};
+
+  for ( const auto &testJson : tests )
+  {
+    const auto parsed = QgsJsonUtils::parseJson( testJson );
+    QCOMPARE( QString::fromStdString( QgsJsonUtils::jsonFromVariant( parsed ).dump() ), testJson );
+  }
+
+  // Test empty string: null
+  QCOMPARE( QString::fromStdString( QgsJsonUtils::jsonFromVariant( QgsJsonUtils::parseJson( QStringLiteral( "" ) ) ).dump() ), QString( "null" ) );
+  // invalid json -> null
+  QCOMPARE( QString::fromStdString( QgsJsonUtils::jsonFromVariant( QgsJsonUtils::parseJson( QStringLiteral( "invalid json" ) ) ).dump() ), QString( "null" ) );
+
 }
 
 void TestQgsJsonUtils::testIntList()
@@ -166,7 +195,7 @@ void TestQgsJsonUtils::testExportAttributesJson()
   {
     QBENCHMARK
     {
-      const auto json { QgsJsonUtils::exportAttributes( feature, &vl ) };
+      const auto json = QgsJsonUtils::exportAttributes( feature, &vl );
       QCOMPARE( json, QStringLiteral( "{\"fldtxt\":\"a value\",\n\"fldint\":1,\n\"flddbl\":2}" ) );
     }
   }
@@ -183,16 +212,30 @@ void TestQgsJsonUtils::testExportFeatureJson()
 
   QgsJsonExporter exporter { &vl };
 
-  const auto expectedJson { QStringLiteral( "{\"bbox\":[[1.12,1.12,5.45,5.33]],\"geometry\":{\"coordinates\":"
-                                            "[[[1.12,1.34],[5.45,1.12],[5.34,5.33],[1.56,5.2],[1.12,1.34]],"
-                                            "[[2.0,2.0],[3.0,2.0],[3.0,3.0],[2.0,3.0],[2.0,2.0]]],\"type\":\"Polygon\"}"
-                                            ",\"id\":0,\"properties\":{\"flddbl\":2.0,\"fldint\":1,\"fldtxt\":\"a value\"}"
-                                            ",\"type\":\"Feature\"}" ) };
+  const auto expectedJson { QStringLiteral( "{\"bbox\":[1.12,1.12,5.45,5.33],\"geometry\":{\"coordinates\":"
+                            "[[[1.12,1.34],[5.45,1.12],[5.34,5.33],[1.56,5.2],[1.12,1.34]],"
+                            "[[2.0,2.0],[3.0,2.0],[3.0,3.0],[2.0,3.0],[2.0,2.0]]],\"type\":\"Polygon\"}"
+                            ",\"id\":0,\"properties\":{\"flddbl\":2.0,\"fldint\":1,\"fldtxt\":\"a value\"}"
+                            ",\"type\":\"Feature\"}" ) };
 
   const auto j( exporter.exportFeatureToJsonObject( feature ) );
   QCOMPARE( QString::fromStdString( j.dump() ),  expectedJson );
-  const auto json { exporter.exportFeature( feature ) };
+  const auto json = exporter.exportFeature( feature );
   QCOMPARE( json, expectedJson );
+
+  QgsJsonExporter exporterPrecision { &vl, 1 };
+
+  const auto expectedJsonPrecision { QStringLiteral( "{\"bbox\":[1.1,1.1,5.5,5.3],\"geometry\":{\"coordinates\":"
+                                     "[[[1.1,1.3],[5.5,1.1],[5.3,5.3],[1.6,5.2],[1.1,1.3]],"
+                                     "[[2.0,2.0],[3.0,2.0],[3.0,3.0],[2.0,3.0],[2.0,2.0]]],\"type\":\"Polygon\"}"
+                                     ",\"id\":0,\"properties\":{\"flddbl\":2.0,\"fldint\":1,\"fldtxt\":\"a value\"}"
+                                     ",\"type\":\"Feature\"}" ) };
+
+  const auto jPrecision( exporterPrecision.exportFeatureToJsonObject( feature ) );
+  QCOMPARE( QString::fromStdString( jPrecision.dump() ),  expectedJsonPrecision );
+  const auto jsonPrecision { exporterPrecision.exportFeature( feature ) };
+  QCOMPARE( jsonPrecision, expectedJsonPrecision );
+
 }
 
 void TestQgsJsonUtils::testExportGeomToJson()

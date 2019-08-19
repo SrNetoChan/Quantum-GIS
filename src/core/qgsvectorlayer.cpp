@@ -217,6 +217,10 @@ QgsVectorLayer *QgsVectorLayer::clone() const
     options.transformContext = mDataProvider->transformContext();
   }
   QgsVectorLayer *layer = new QgsVectorLayer( source(), name(), mProviderKey, options );
+  if ( mDataProvider && layer->dataProvider() )
+  {
+    layer->dataProvider()->handlePostCloneOperations( mDataProvider );
+  }
   QgsMapLayer::clone( layer );
 
   QList<QgsVectorLayerJoinInfo> joins = vectorJoins();
@@ -773,7 +777,6 @@ QgsRectangle QgsVectorLayer::extent() const
   if ( !isSpatial() )
     return rect;
 
-
   if ( !mValidExtent && mLazyExtent && mDataProvider && !mDataProvider->hasMetadata() && mReadExtentFromXml && !mXmlExtent.isNull() )
   {
     mExtent = mXmlExtent;
@@ -1302,6 +1305,11 @@ int QgsVectorLayer::addTopologicalPoints( const QgsGeometry &geom )
 
 int QgsVectorLayer::addTopologicalPoints( const QgsPointXY &p )
 {
+  return addTopologicalPoints( QgsPoint( p ) );
+}
+
+int QgsVectorLayer::addTopologicalPoints( const QgsPoint &p )
+{
   if ( !mValid || !mEditBuffer || !mDataProvider )
     return -1;
 
@@ -1386,6 +1394,19 @@ void QgsVectorLayer::setTransformContext( const QgsCoordinateTransformContext &t
     mDataProvider->setTransformContext( transformContext );
 }
 
+bool QgsVectorLayer::accept( QgsStyleEntityVisitorInterface *visitor ) const
+{
+  if ( mRenderer )
+    if ( !mRenderer->accept( visitor ) )
+      return false;
+
+  if ( mLabeling )
+    if ( !mLabeling->accept( visitor ) )
+      return false;
+
+  return true;
+}
+
 bool QgsVectorLayer::readXml( const QDomNode &layer_node, QgsReadWriteContext &context )
 {
   QgsDebugMsgLevel( QStringLiteral( "Datasource in QgsVectorLayer::readXml: %1" ).arg( mDataSource.toLocal8Bit().data() ), 3 );
@@ -1419,9 +1440,12 @@ bool QgsVectorLayer::readXml( const QDomNode &layer_node, QgsReadWriteContext &c
   }
 
   QgsDataProvider::ProviderOptions options { context.transformContext() };
-  if ( !setDataProvider( mProviderKey, options ) )
+  if ( ( mReadFlags & QgsMapLayer::FlagDontResolveLayers ) || !setDataProvider( mProviderKey, options ) )
   {
-    QgsDebugMsg( QStringLiteral( "Could not set data provider for layer %1" ).arg( publicSource() ) );
+    if ( !( mReadFlags & QgsMapLayer::FlagDontResolveLayers ) )
+    {
+      QgsDebugMsg( QStringLiteral( "Could not set data provider for layer %1" ).arg( publicSource() ) );
+    }
     const QDomElement elem = layer_node.toElement();
 
     // for invalid layer sources, we fallback to stored wkbType if available
@@ -1636,6 +1660,9 @@ bool QgsVectorLayer::setDataProvider( QString const &provider, const QgsDataProv
 
   if ( mProviderKey == QLatin1String( "postgres" ) )
   {
+    // update datasource from data provider computed one
+    mDataSource = mDataProvider->dataSourceUri( false );
+
     QgsDebugMsgLevel( QStringLiteral( "Beautifying layer name %1" ).arg( name() ), 3 );
 
     // adjust the display name for postgres layers
@@ -1810,6 +1837,35 @@ QString QgsVectorLayer::encodedSource( const QString &source, const QgsReadWrite
     // Refetch the source from the provider, because adding fields actually changes the source for this provider.
     src = dataProvider()->dataSourceUri();
   }
+  else if ( providerType() == QLatin1String( "virtual" ) )
+  {
+    QUrl urlSource = QUrl::fromEncoded( src.toLatin1() );
+    QStringList theURIParts;
+
+    QUrlQuery query = QUrlQuery( urlSource.query() );
+    QList<QPair<QString, QString> > queryItems = query.queryItems();
+
+    for ( int i = 0; i < queryItems.size(); i++ )
+    {
+      QString key = queryItems.at( i ).first;
+      QString value = queryItems.at( i ).second;
+      if ( key == QLatin1String( "layer" ) )
+      {
+        // syntax: provider:url_encoded_source_URI(:name(:encoding)?)?
+        theURIParts = value.split( ':' );
+        theURIParts[1] = QUrl::fromPercentEncoding( theURIParts[1].toUtf8() );
+        theURIParts[1] = context.pathResolver().writePath( theURIParts[1] );
+        theURIParts[1] = QUrl::toPercentEncoding( theURIParts[1] );
+        queryItems[i].second =  theURIParts.join( QStringLiteral( ":" ) ) ;
+      }
+    }
+
+    query.setQueryItems( queryItems );
+
+    QUrl urlDest = QUrl( urlSource );
+    urlDest.setQuery( query.query() );
+    src = QString::fromLatin1( urlDest.toEncoded() );
+  }
   else
   {
     src = context.pathResolver().writePath( src );
@@ -1853,6 +1909,35 @@ QString QgsVectorLayer::decodedSource( const QString &source, const QString &pro
 
     QUrl urlDest = QUrl::fromLocalFile( context.pathResolver().readPath( urlSource.toLocalFile() ) );
     urlDest.setQueryItems( urlSource.queryItems() );
+    src = QString::fromLatin1( urlDest.toEncoded() );
+  }
+  else if ( provider == QLatin1String( "virtual" ) )
+  {
+    QUrl urlSource = QUrl::fromEncoded( src.toLatin1() );
+    QStringList theURIParts;
+
+    QUrlQuery query = QUrlQuery( urlSource.query() );
+    QList<QPair<QString, QString> > queryItems = query.queryItems();
+
+    for ( int i = 0; i < queryItems.size(); i++ )
+    {
+      QString key = queryItems.at( i ).first;
+      QString value = queryItems.at( i ).second;
+      if ( key == QLatin1String( "layer" ) )
+      {
+        // syntax: provider:url_encoded_source_URI(:name(:encoding)?)?
+        theURIParts = value.split( ':' );
+        theURIParts[1] = QUrl::fromPercentEncoding( theURIParts[1].toUtf8() );
+        theURIParts[1] = context.pathResolver().readPath( theURIParts[1] );
+        theURIParts[1] = QUrl::toPercentEncoding( theURIParts[1] );
+        queryItems[i].second =  theURIParts.join( QStringLiteral( ":" ) ) ;
+      }
+    }
+
+    query.setQueryItems( queryItems );
+
+    QUrl urlDest = QUrl( urlSource );
+    urlDest.setQuery( query.query() );
     src = QString::fromLatin1( urlDest.toEncoded() );
   }
   else
@@ -2110,7 +2195,10 @@ bool QgsVectorLayer::readStyle( const QDomNode &node, QString &errorMessage,
   bool result = true;
   emit readCustomSymbology( node.toElement(), errorMessage );
 
-  if ( isSpatial() )
+  // we must try to restore a renderer if our geometry type is unknown
+  // as this allows the renderer to be correctly restored even for layers
+  // with broken sources
+  if ( isSpatial() || mWkbType == QgsWkbTypes::Unknown )
   {
     // try renderer v2 first
     if ( categories.testFlag( Symbology ) )
@@ -2129,7 +2217,7 @@ bool QgsVectorLayer::readStyle( const QDomNode &node, QString &errorMessage,
         }
       }
       // make sure layer has a renderer - if none exists, fallback to a default renderer
-      if ( !renderer() )
+      if ( isSpatial() && !renderer() )
       {
         setRenderer( QgsFeatureRenderer::defaultRenderer( geometryType() ) );
       }
@@ -2625,6 +2713,8 @@ bool QgsVectorLayer::changeAttributeValue( QgsFeatureId fid, int field, const QV
   {
     case QgsFields::OriginJoin:
       result = mJoinBuffer->changeAttributeValue( fid, field, newValue, oldValue );
+      if ( result )
+        emit attributeValueChanged( fid, field, newValue );
       break;
 
     case QgsFields::OriginProvider:
@@ -3106,7 +3196,7 @@ void QgsVectorLayer::setCoordinateSystem()
 
 QString QgsVectorLayer::displayField() const
 {
-  QgsExpression exp( mDisplayExpression );
+  QgsExpression exp( displayExpression() );
   if ( exp.isField() )
   {
     return static_cast<const QgsExpressionNodeColumnRef *>( exp.rootNode() )->name();
@@ -3134,30 +3224,35 @@ QString QgsVectorLayer::displayExpression() const
   {
     QString idxName;
 
-    const auto constMFields = mFields;
-    for ( const QgsField &field : constMFields )
+    // Check the fields and keep the first one that matches.
+    // We assume that the user has organized the data with the
+    // more "interesting" field names first. As such, name should
+    // be selected before oldname, othername, etc.
+    // This candidates list is a prioritized list of candidates ranked by "interestingness"!
+    // See discussion at https://github.com/qgis/QGIS/pull/30245 - this list must NOT be translated,
+    // but adding hardcoded localized variants of the strings is encouraged.
+    static QStringList sCandidates{ QStringLiteral( "name" ),
+                                    QStringLiteral( "title" ),
+                                    QStringLiteral( "heibt" ),
+                                    QStringLiteral( "desc" ),
+                                    QStringLiteral( "nom" ),
+                                    QStringLiteral( "street" ),
+                                    QStringLiteral( "road" ),
+                                    QStringLiteral( "id" )};
+    for ( const QString &candidate : sCandidates )
     {
-      QString fldName = field.name();
+      for ( const QgsField &field : mFields )
+      {
+        QString fldName = field.name();
+        if ( fldName.indexOf( candidate, 0, Qt::CaseInsensitive ) > -1 )
+        {
+          idxName = fldName;
+          break;
+        }
+      }
 
-      // Check the fields and keep the first one that matches.
-      // We assume that the user has organized the data with the
-      // more "interesting" field names first. As such, name should
-      // be selected before oldname, othername, etc.
-      if ( fldName.indexOf( QLatin1String( "name" ), 0, Qt::CaseInsensitive ) > -1 )
-      {
-        idxName = fldName;
+      if ( !idxName.isEmpty() )
         break;
-      }
-      if ( fldName.indexOf( QLatin1String( "descrip" ), 0, Qt::CaseInsensitive ) > -1 )
-      {
-        idxName = fldName;
-        break;
-      }
-      if ( fldName.indexOf( QLatin1String( "id" ), 0, Qt::CaseInsensitive ) > -1 )
-      {
-        idxName = fldName;
-        break;
-      }
     }
 
     if ( !idxName.isNull() )
@@ -3225,7 +3320,10 @@ bool QgsVectorLayer::isAuxiliaryField( int index, int &srcIndex ) const
 
 void QgsVectorLayer::setRenderer( QgsFeatureRenderer *r )
 {
-  if ( !isSpatial() )
+  // we must allow setting a renderer if our geometry type is unknown
+  // as this allows the renderer to be correctly set even for layers
+  // with broken sources
+  if ( !isSpatial() && mWkbType != QgsWkbTypes::Unknown )
     return;
 
   if ( r != mRenderer )
@@ -3912,7 +4010,8 @@ QVariant QgsVectorLayer::maximumValue( int index ) const
 }
 
 QVariant QgsVectorLayer::aggregate( QgsAggregateCalculator::Aggregate aggregate, const QString &fieldOrExpression,
-                                    const QgsAggregateCalculator::AggregateParameters &parameters, QgsExpressionContext *context, bool *ok ) const
+                                    const QgsAggregateCalculator::AggregateParameters &parameters, QgsExpressionContext *context,
+                                    bool *ok, QgsFeatureIds *fids ) const
 {
   if ( ok )
     *ok = false;
@@ -3932,7 +4031,7 @@ QVariant QgsVectorLayer::aggregate( QgsAggregateCalculator::Aggregate aggregate,
     if ( origin == QgsFields::OriginProvider )
     {
       bool providerOk = false;
-      QVariant val = mDataProvider->aggregate( aggregate, attrIndex, parameters, context, providerOk );
+      QVariant val = mDataProvider->aggregate( aggregate, attrIndex, parameters, context, providerOk, fids );
       if ( providerOk )
       {
         // provider handled calculation
@@ -3945,6 +4044,8 @@ QVariant QgsVectorLayer::aggregate( QgsAggregateCalculator::Aggregate aggregate,
 
   // fallback to using aggregate calculator to determine aggregate
   QgsAggregateCalculator c( this );
+  if ( fids )
+    c.setFidsFilter( *fids );
   c.setParameters( parameters );
   return c.calculate( aggregate, fieldOrExpression, context, ok );
 }
@@ -4483,57 +4584,17 @@ QList<QgsRelation> QgsVectorLayer::referencingRelations( int idx ) const
 
 int QgsVectorLayer::listStylesInDatabase( QStringList &ids, QStringList &names, QStringList &descriptions, QString &msgError )
 {
-  std::unique_ptr<QLibrary> myLib( QgsProviderRegistry::instance()->createProviderLibrary( mProviderKey ) );
-  if ( !myLib )
-  {
-    msgError = QObject::tr( "Unable to load %1 provider" ).arg( mProviderKey );
-    return -1;
-  }
-  listStyles_t *listStylesExternalMethod = reinterpret_cast< listStyles_t * >( cast_to_fptr( myLib->resolve( "listStyles" ) ) );
-
-  if ( !listStylesExternalMethod )
-  {
-    msgError = QObject::tr( "Provider %1 has no %2 method" ).arg( mProviderKey, QStringLiteral( "listStyles" ) );
-    return -1;
-  }
-
-  return listStylesExternalMethod( mDataSource, ids, names, descriptions, msgError );
+  return QgsProviderRegistry::instance()->listStyles( mProviderKey, mDataSource, ids, names, descriptions, msgError );
 }
 
 QString QgsVectorLayer::getStyleFromDatabase( const QString &styleId, QString &msgError )
 {
-  std::unique_ptr<QLibrary> myLib( QgsProviderRegistry::instance()->createProviderLibrary( mProviderKey ) );
-  if ( !myLib )
-  {
-    msgError = QObject::tr( "Unable to load %1 provider" ).arg( mProviderKey );
-    return QString();
-  }
-  getStyleById_t *getStyleByIdMethod = reinterpret_cast< getStyleById_t * >( cast_to_fptr( myLib->resolve( "getStyleById" ) ) );
-
-  if ( !getStyleByIdMethod )
-  {
-    msgError = QObject::tr( "Provider %1 has no %2 method" ).arg( mProviderKey, QStringLiteral( "getStyleById" ) );
-    return QString();
-  }
-
-  return getStyleByIdMethod( mDataSource, styleId, msgError );
+  return QgsProviderRegistry::instance()->getStyleById( mProviderKey, mDataSource, styleId, msgError );
 }
 
 bool QgsVectorLayer::deleteStyleFromDatabase( const QString &styleId, QString &msgError )
 {
-  std::unique_ptr<QLibrary> myLib( QgsProviderRegistry::instance()->createProviderLibrary( mProviderKey ) );
-  if ( !myLib )
-  {
-    msgError = QObject::tr( "Unable to load %1 provider" ).arg( mProviderKey );
-    return false;
-  }
-  deleteStyleById_t *deleteStyleByIdMethod = reinterpret_cast< deleteStyleById_t * >( cast_to_fptr( myLib->resolve( "deleteStyleById" ) ) );
-  if ( !deleteStyleByIdMethod )
-  {
-    msgError = QObject::tr( "Provider %1 has no %2 method" ).arg( mProviderKey, QStringLiteral( "deleteStyleById" ) );
-    return false;
-  }
-  return deleteStyleByIdMethod( mDataSource, styleId, msgError );
+  return QgsProviderRegistry::instance()->deleteStyleById( mProviderKey, mDataSource, styleId, msgError );
 }
 
 
@@ -4542,20 +4603,6 @@ void QgsVectorLayer::saveStyleToDatabase( const QString &name, const QString &de
 {
 
   QString sldStyle, qmlStyle;
-  std::unique_ptr<QLibrary> myLib( QgsProviderRegistry::instance()->createProviderLibrary( mProviderKey ) );
-  if ( !myLib )
-  {
-    msgError = QObject::tr( "Unable to load %1 provider" ).arg( mProviderKey );
-    return;
-  }
-  saveStyle_t *saveStyleExternalMethod = reinterpret_cast< saveStyle_t * >( cast_to_fptr( myLib->resolve( "saveStyle" ) ) );
-
-  if ( !saveStyleExternalMethod )
-  {
-    msgError = QObject::tr( "Provider %1 has no %2 method" ).arg( mProviderKey, QStringLiteral( "saveStyle" ) );
-    return;
-  }
-
   QDomDocument qmlDocument, sldDocument;
   QgsReadWriteContext context;
   exportNamedStyle( qmlDocument, msgError, context );
@@ -4572,8 +4619,9 @@ void QgsVectorLayer::saveStyleToDatabase( const QString &name, const QString &de
   }
   sldStyle = sldDocument.toString();
 
-  saveStyleExternalMethod( mDataSource, qmlStyle, sldStyle, name,
-                           description, uiFileContent, useAsDefault, msgError );
+  QgsProviderRegistry::instance()->saveStyle( mProviderKey,
+      mDataSource, qmlStyle, sldStyle, name,
+      description, uiFileContent, useAsDefault, msgError );
 }
 
 
@@ -4650,25 +4698,16 @@ QString QgsVectorLayer::loadNamedStyle( const QString &theURI, bool &resultFlag,
   QgsDataSourceUri dsUri( theURI );
   if ( !loadFromLocalDB && mDataProvider && mDataProvider->isSaveAndLoadStyleToDatabaseSupported() )
   {
-    std::unique_ptr<QLibrary> myLib( QgsProviderRegistry::instance()->createProviderLibrary( mProviderKey ) );
-    if ( myLib )
+    QString qml, errorMsg;
+    qml = QgsProviderRegistry::instance()->loadStyle( mProviderKey, mDataSource, errorMsg );
+    if ( !qml.isEmpty() )
     {
-      loadStyle_t *loadStyleExternalMethod = reinterpret_cast< loadStyle_t * >( cast_to_fptr( myLib->resolve( "loadStyle" ) ) );
-      if ( loadStyleExternalMethod )
-      {
-        QString qml, errorMsg;
-        qml = loadStyleExternalMethod( mDataSource, errorMsg );
-        if ( !qml.isEmpty() )
-        {
-          QDomDocument myDocument( QStringLiteral( "qgis" ) );
-          myDocument.setContent( qml );
-          resultFlag = importNamedStyle( myDocument, errorMsg );
-          return QObject::tr( "Loaded from Provider" );
-        }
-      }
+      QDomDocument myDocument( QStringLiteral( "qgis" ) );
+      myDocument.setContent( qml );
+      resultFlag = importNamedStyle( myDocument, errorMsg );
+      return QObject::tr( "Loaded from Provider" );
     }
   }
-
   return QgsMapLayer::loadNamedStyle( theURI, resultFlag, categories );
 }
 

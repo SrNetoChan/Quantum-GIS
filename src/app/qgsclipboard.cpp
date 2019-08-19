@@ -120,7 +120,12 @@ QString QgsClipboard::generateClipboardText() const
         for ( int idx = 0; idx < attributes.count(); ++idx )
         {
           // QgsDebugMsg(QString("inspecting field '%1'.").arg(it2->toString()));
-          textFields += attributes.at( idx ).toString();
+          if ( attributes.at( idx ).toString().contains( QStringLiteral( "\n" ), Qt::CaseInsensitive ) )
+            textFields += QStringLiteral( "\"" ) + attributes.at( idx ).toString() + QStringLiteral( "\"" );
+          else
+          {
+            textFields += attributes.at( idx ).toString();
+          }
         }
 
         textLines += textFields.join( QStringLiteral( "\t" ) );
@@ -212,7 +217,7 @@ QgsFeatureList QgsClipboard::stringToFeatureList( const QString &string, const Q
     // previous QgsOgrUtils::stringToFeatureList call
     // Get the first value of a \t separated list. WKT clipboard pasted
     // feature has first element the WKT geom.
-    // This split is to fix the following issue: https://issues.qgis.org/issues/16870
+    // This split is to fix the following issue: https://github.com/qgis/QGIS/issues/24769
     // Value separators are set in generateClipboardText
     QStringList fieldValues = row.split( '\t' );
     if ( fieldValues.isEmpty() )

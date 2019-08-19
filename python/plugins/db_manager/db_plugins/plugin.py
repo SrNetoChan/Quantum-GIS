@@ -31,7 +31,10 @@ from qgis.core import (
     Qgis,
     QgsApplication,
     QgsSettings,
-    QgsMapLayerType
+    QgsMapLayerType,
+    QgsWkbTypes,
+    QgsProviderConnectionException,
+    QgsProviderRegistry,
 )
 from ..db_plugins import createDbPlugin
 
@@ -125,9 +128,16 @@ class DBPlugin(QObject):
         return self.connect(self.parent())
 
     def remove(self):
-        settings = QgsSettings()
-        settings.beginGroup(u"/%s/%s" % (self.connectionSettingsKey(), self.connectionName()))
-        settings.remove("")
+
+        # Try the new API first, fallback to legacy
+        try:
+            md = QgsProviderRegistry.instance().providerMetadata(self.providerName())
+            md.deleteConnection(self.connectionName())
+        except (AttributeError, QgsProviderConnectionException) as ex:
+            settings = QgsSettings()
+            settings.beginGroup(u"/%s/%s" % (self.connectionSettingsKey(), self.connectionName()))
+            settings.remove("")
+
         self.deleted.emit()
         return True
 
@@ -162,12 +172,21 @@ class DBPlugin(QObject):
     @classmethod
     def connections(self):
         # get the list of connections
+
         conn_list = []
-        settings = QgsSettings()
-        settings.beginGroup(self.connectionSettingsKey())
-        for name in settings.childGroups():
-            conn_list.append(createDbPlugin(self.typeName(), name))
-        settings.endGroup()
+
+        # First try with the new core API, if that fails, proceed with legacy code
+        try:
+            md = QgsProviderRegistry.instance().providerMetadata(self.providerName())
+            for name in md.dbConnections().keys():
+                conn_list.append(createDbPlugin(self.typeName(), name))
+        except (AttributeError, QgsProviderConnectionException) as ex:
+            settings = QgsSettings()
+            settings.beginGroup(self.connectionSettingsKey())
+            for name in settings.childGroups():
+                conn_list.append(createDbPlugin(self.typeName(), name))
+            settings.endGroup()
+
         return conn_list
 
     def databasesFactory(self, connection, uri):
@@ -522,8 +541,28 @@ class Database(DbItemObject):
     def tables(self, schema=None, sys_tables=False):
         tables = self.connector.getTables(schema.name if schema else None, sys_tables)
         if tables is not None:
-            tables = [self.tablesFactory(x, self, schema) for x in tables]
-        return tables
+            ret = []
+            for t in tables:
+                table = self.tablesFactory(t, self, schema)
+                ret.append(table)
+
+                # Similarly to what to browser does, if the geom type is generic geometry,
+                # we additionnly add three copies of the layer to allow importing
+                if isinstance(table, VectorTable):
+                    if table.geomType == 'GEOMETRY':
+                        point_table = self.tablesFactory(t, self, schema)
+                        point_table.geomType = 'POINT'
+                        ret.append(point_table)
+
+                        line_table = self.tablesFactory(t, self, schema)
+                        line_table.geomType = 'LINESTRING'
+                        ret.append(line_table)
+
+                        poly_table = self.tablesFactory(t, self, schema)
+                        poly_table.geomType = 'POLYGON'
+                        ret.append(poly_table)
+
+        return ret
 
     def createTable(self, table, fields, schema=None):
         field_defs = [x.definition() for x in fields]
@@ -961,6 +1000,15 @@ class VectorTable(Table):
         from .info_model import VectorTableInfo
 
         return VectorTableInfo(self)
+
+    def uri(self):
+        uri = super().uri()
+        for f in self.fields():
+            if f.primaryKey:
+                uri.setKeyColumn(f.name)
+                break
+        uri.setWkbType(QgsWkbTypes.parseType(self.geomType))
+        return uri
 
     def hasSpatialIndex(self, geom_column=None):
         geom_column = geom_column if geom_column is not None else self.geomColumn

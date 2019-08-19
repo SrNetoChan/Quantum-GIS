@@ -250,6 +250,7 @@ Returns a GeoJSON string representation of a list of features (feature collectio
 .. seealso:: :py:func:`exportFeature`
 %End
 
+
 };
 
 
@@ -333,6 +334,7 @@ Parse a simple array (depth=1)
 
 .. versionadded:: 3.0
 %End
+
 
 
 

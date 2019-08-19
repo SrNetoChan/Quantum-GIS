@@ -208,11 +208,11 @@ brew tap osgeo/osgeo4mac
 brew unlink qt
 brew unlink pyqt
 
-# Older txt2tags generator for INSTALL doc breakes build and chokes on Python 3
+# Older txt2tags generator for INSTALL doc breaks build and chokes on Python 3
 brew unlink txt2tags
 
 # Install and verify GDAL/OGR with decent driver support
-# Do NOT install `gdal` (1.11.x) formula, unless you truely need it otherwise
+# Do NOT install `gdal` (1.11.x) formula, unless you truly need it otherwise
 # NOTE: keg-only, e.g. only available from HOMEBREW_PREFIX/opt/gdal2 prefix
 brew install osgeo/osgeo4mac/gdal2 --with-complete --with-libkml
 brew test osgeo/osgeo4mac/gdal2

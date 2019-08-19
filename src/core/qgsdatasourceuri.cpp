@@ -31,8 +31,9 @@ QgsDataSourceUri::QgsDataSourceUri()
   // do nothing
 }
 
-QgsDataSourceUri::QgsDataSourceUri( QString uri )
+QgsDataSourceUri::QgsDataSourceUri( const QString &u )
 {
+  QString uri = u;
   int i = 0;
   while ( i < uri.length() )
   {
@@ -382,6 +383,16 @@ QString QgsDataSourceUri::escape( const QString &val, QChar delim = '\'' ) const
   escaped.replace( delim, QStringLiteral( "\\%1" ).arg( delim ) );
 
   return escaped;
+}
+
+void QgsDataSourceUri::setGeometryColumn( const QString &geometryColumn )
+{
+  mGeometryColumn = geometryColumn;
+}
+
+void QgsDataSourceUri::setTable( const QString &table )
+{
+  mTable = table;
 }
 
 void QgsDataSourceUri::skipBlanks( const QString &uri, int &i )

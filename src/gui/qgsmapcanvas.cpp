@@ -154,10 +154,10 @@ QgsMapCanvas::QgsMapCanvas( QWidget *parent )
   } );
 
   // refresh canvas when a remote svg/image has finished downloading
-  connect( QgsApplication::svgCache(), &QgsSvgCache::remoteSvgFetched, this, &QgsMapCanvas::refreshAllLayers );
-  connect( QgsApplication::imageCache(), &QgsImageCache::remoteImageFetched, this, &QgsMapCanvas::refreshAllLayers );
+  connect( QgsApplication::svgCache(), &QgsSvgCache::remoteSvgFetched, this, &QgsMapCanvas::redrawAllLayers );
+  connect( QgsApplication::imageCache(), &QgsImageCache::remoteImageFetched, this, &QgsMapCanvas::redrawAllLayers );
   // refresh canvas when project color scheme is changed -- if layers use project colors, they need to be redrawn
-  connect( QgsProject::instance(), &QgsProject::projectColorsChanged, this, &QgsMapCanvas::refreshAllLayers );
+  connect( QgsProject::instance(), &QgsProject::projectColorsChanged, this, &QgsMapCanvas::redrawAllLayers );
 
   //segmentation parameters
   QgsSettings settings;
@@ -513,7 +513,7 @@ void QgsMapCanvas::refresh()
 
   // schedule a refresh
   mRefreshTimer->start( 1 );
-} // refresh
+}
 
 void QgsMapCanvas::refreshMap()
 {
@@ -592,7 +592,6 @@ void QgsMapCanvas::mapThemeChanged( const QString &theme )
   }
 }
 
-
 void QgsMapCanvas::rendererJobFinished()
 {
   QgsDebugMsg( QStringLiteral( "CANVAS finish! %1" ).arg( !mJobCanceled ) );
@@ -603,6 +602,8 @@ void QgsMapCanvas::rendererJobFinished()
   const auto constErrors = mJob->errors();
   for ( const QgsMapRendererJob::Error &error : constErrors )
   {
+    QgsMapLayer *layer = QgsProject::instance()->mapLayer( error.layerID );
+    emit renderErrorOccurred( error.message, layer );
     QgsMessageLog::logMessage( error.layerID + " :: " + error.message, tr( "Rendering" ) );
   }
 
@@ -1538,19 +1539,28 @@ void QgsMapCanvas::mouseReleaseEvent( QMouseEvent *e )
 void QgsMapCanvas::resizeEvent( QResizeEvent *e )
 {
   QGraphicsView::resizeEvent( e );
-  mResizeTimer->start( 500 );
+  mResizeTimer->start( 500 ); // in charge of refreshing canvas
 
+  double oldScale = mSettings.scale();
   QSize lastSize = viewport()->size();
-
   mSettings.setOutputSize( lastSize );
 
   mScene->setSceneRect( QRectF( 0, 0, lastSize.width(), lastSize.height() ) );
 
   moveCanvasContents( true );
 
-  updateScale();
-
-  //refresh();
+  if ( mScaleLocked )
+  {
+    double scaleFactor = oldScale / mSettings.scale();
+    QgsRectangle r = mSettings.extent();
+    QgsPointXY center = r.center();
+    r.scale( scaleFactor, &center );
+    mSettings.setExtent( r );
+  }
+  else
+  {
+    updateScale();
+  }
 
   emit extentsChanged();
 }
@@ -2201,6 +2211,11 @@ void QgsMapCanvas::refreshAllLayers()
     layer->reload();
   }
 
+  redrawAllLayers();
+}
+
+void QgsMapCanvas::redrawAllLayers()
+{
   // clear the cache
   clearCache();
 

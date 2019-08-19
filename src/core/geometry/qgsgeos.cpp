@@ -62,7 +62,7 @@ static void throwGEOSException( const char *fmt, ... )
 
 #ifdef _MSC_VER
   // stupid stupid MSVC, *SOMETIMES* raises it's own exception if we throw GEOSException, resulting in a crash!
-  // see https://issues.qgis.org/issues/14752
+  // see https://github.com/qgis/QGIS/issues/22709
   // if you want to test alternative fixes for this, run the testqgsexpression.cpp test suite - that will crash
   // and burn on the "line_interpolate_point point" test if a GEOSException is thrown.
   // TODO - find a real fix for the underlying issue
@@ -1109,6 +1109,7 @@ std::unique_ptr<QgsAbstractGeometry> QgsGeos::fromGeos( const GEOSGeometry *geos
     {
       std::unique_ptr< QgsMultiPoint > multiPoint( new QgsMultiPoint() );
       int nParts = GEOSGetNumGeometries_r( geosinit.ctxt, geos );
+      multiPoint->reserve( nParts );
       for ( int i = 0; i < nParts; ++i )
       {
         const GEOSCoordSequence *cs = GEOSGeom_getCoordSeq_r( geosinit.ctxt, GEOSGetGeometryN_r( geosinit.ctxt, geos, i ) );
@@ -1123,6 +1124,7 @@ std::unique_ptr<QgsAbstractGeometry> QgsGeos::fromGeos( const GEOSGeometry *geos
     {
       std::unique_ptr< QgsMultiLineString > multiLineString( new QgsMultiLineString() );
       int nParts = GEOSGetNumGeometries_r( geosinit.ctxt, geos );
+      multiLineString->reserve( nParts );
       for ( int i = 0; i < nParts; ++i )
       {
         std::unique_ptr< QgsLineString >line( sequenceToLinestring( GEOSGetGeometryN_r( geosinit.ctxt, geos, i ), hasZ, hasM ) );
@@ -1138,6 +1140,7 @@ std::unique_ptr<QgsAbstractGeometry> QgsGeos::fromGeos( const GEOSGeometry *geos
       std::unique_ptr< QgsMultiPolygon > multiPolygon( new QgsMultiPolygon() );
 
       int nParts = GEOSGetNumGeometries_r( geosinit.ctxt, geos );
+      multiPolygon->reserve( nParts );
       for ( int i = 0; i < nParts; ++i )
       {
         std::unique_ptr< QgsPolygon > poly = fromGeosPolygon( GEOSGetGeometryN_r( geosinit.ctxt, geos, i ) );
@@ -1152,6 +1155,7 @@ std::unique_ptr<QgsAbstractGeometry> QgsGeos::fromGeos( const GEOSGeometry *geos
     {
       std::unique_ptr< QgsGeometryCollection > geomCollection( new QgsGeometryCollection() );
       int nParts = GEOSGetNumGeometries_r( geosinit.ctxt, geos );
+      geomCollection->reserve( nParts );
       for ( int i = 0; i < nParts; ++i )
       {
         std::unique_ptr< QgsAbstractGeometry > geom( fromGeos( GEOSGetGeometryN_r( geosinit.ctxt, geos, i ) ) );
@@ -1672,6 +1676,13 @@ bool QgsGeos::isValid( QString *errorMsg, const bool allowSelfTouchingHoles, Qgs
     char res = GEOSisValidDetail_r( geosinit.ctxt, mGeos.get(), allowSelfTouchingHoles ? GEOSVALID_ALLOW_SELFTOUCHING_RING_FORMING_HOLE : 0, &r, &g1 );
     const bool invalid = res != 1;
 
+    QString error;
+    if ( r )
+    {
+      error = QString( r );
+      GEOSFree_r( geosinit.ctxt, r );
+    }
+
     if ( invalid && errorMsg )
     {
       static QgsStringMap translatedErrors;
@@ -1693,7 +1704,6 @@ bool QgsGeos::isValid( QString *errorMsg, const bool allowSelfTouchingHoles, Qgs
         translatedErrors.insert( QStringLiteral( "ring is not closed" ), QObject::tr( "Ring is not closed", "GEOS Error" ) );
       }
 
-      const QString error( r );
       *errorMsg = translatedErrors.value( error.toLower(), error );
 
       if ( g1 && errorLoc )

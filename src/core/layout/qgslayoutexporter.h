@@ -21,9 +21,11 @@
 #include "qgsmargins.h"
 #include "qgslayoutrendercontext.h"
 #include "qgslayoutreportcontext.h"
+#include "qgslayoutitem.h"
 #include <QPointer>
 #include <QSize>
 #include <QRectF>
+#include <functional>
 
 #ifndef QT_NO_PRINTER
 
@@ -266,6 +268,13 @@ class CORE_EXPORT QgsLayoutExporter
       bool forceVectorOutput = false;
 
       /**
+       * Indicates whether PDF export should append georeference data
+       *
+       * \since QGIS 3.10
+       */
+      bool appendGeoreference = true;
+
+      /**
        * Indicates whether PDF export should include metadata generated
        * from the layout's project's metadata.
        *
@@ -285,6 +294,27 @@ class CORE_EXPORT QgsLayoutExporter
        * \since QGIS 3.4.3
        */
       QgsRenderContext::TextRenderFormat textRenderFormat = QgsRenderContext::TextFormatAlwaysOutlines;
+
+      /**
+       * Indicates whether vector geometries should be simplified to avoid redundant extraneous detail,
+       * such as vertices which are not visible at the specified dpi of the output.
+       *
+       * \since QGIS 3.10
+       */
+      bool simplifyGeometries = true;
+
+      /**
+       * TRUE if GeoPDF files should be created, instead of normal PDF files.
+       *
+       * Whilst GeoPDF files can include some desirable properties like the ability to interactively
+       * query map features, they also can result in lower-quality output files, or forced rasterization
+       * of layers.
+       *
+       * \note Requires builds based on GDAL 3.0 or greater.
+       *
+       * \since QGIS 3.10
+       */
+      bool writeGeoPdf = false;
 
     };
 
@@ -413,6 +443,16 @@ class CORE_EXPORT QgsLayoutExporter
       bool exportAsLayers = false;
 
       /**
+       * Set to TRUE to export labels to separate layers (grouped by map layer)
+       * in layered SVG exports.
+       *
+       * This option is only used if exportAsLayers is TRUE.
+       *
+       * \since QGIS 3.10
+       */
+      bool exportLabelsToSeparateLayers = true;
+
+      /**
        * Indicates whether SVG export should include RDF metadata generated
        * from the layout's project's metadata.
        *
@@ -432,6 +472,14 @@ class CORE_EXPORT QgsLayoutExporter
        * \since QGIS 3.4.3
        */
       QgsRenderContext::TextRenderFormat textRenderFormat = QgsRenderContext::TextFormatAlwaysOutlines;
+
+      /**
+       * Indicates whether vector geometries should be simplified to avoid redundant extraneous detail,
+       * such as vertices which are not visible at the specified dpi of the output.
+       *
+       * \since QGIS 3.10
+       */
+      bool simplifyGeometries = true;
 
     };
 
@@ -568,7 +616,7 @@ class CORE_EXPORT QgsLayoutExporter
     static void updatePrinterPageSize( QgsLayout *layout, QPrinter &printer, int page );
 
     ExportResult renderToLayeredSvg( const SvgExportSettings &settings, double width, double height, int page, const QRectF &bounds,
-                                     const QString &filename, int svgLayerId, const QString &layerName,
+                                     const QString &filename, unsigned int svgLayerId, const QString &layerName,
                                      QDomDocument &svg, QDomNode &svgDocRoot, bool includeMetadata ) const;
 
     void appendMetadataToSvg( QDomDocument &svg ) const;
@@ -576,7 +624,11 @@ class CORE_EXPORT QgsLayoutExporter
     bool georeferenceOutputPrivate( const QString &file, QgsLayoutItemMap *referenceMap = nullptr,
                                     const QRectF &exportRegion = QRectF(), double dpi = -1, bool includeGeoreference = true, bool includeMetadata = false ) const;
 
+    ExportResult handleLayeredExport( const QList<QGraphicsItem *> &items, const std::function<QgsLayoutExporter::ExportResult( unsigned int layerId, const QgsLayoutItem::ExportLayerDetail &layerDetails )> &exportFunc );
+
+    static QgsVectorSimplifyMethod createExportSimplifyMethod();
     friend class TestQgsLayout;
+    friend class TestQgsLayoutExporter;
 
 };
 

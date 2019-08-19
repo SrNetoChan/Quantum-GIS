@@ -28,6 +28,7 @@
 #include "qgswmsprovider.h"
 #include "qgswmsconnection.h"
 #include "qgscoordinatetransform.h"
+#include "qgswmsdataitems.h"
 #include "qgsdatasourceuri.h"
 #include "qgsfeaturestore.h"
 #include "qgsgeometry.h"
@@ -47,12 +48,6 @@
 #include "qgsexception.h"
 #include "qgssettings.h"
 #include "qgsogrutils.h"
-
-#ifdef HAVE_GUI
-#include "qgswmssourceselect.h"
-#include "qgssourceselectprovider.h"
-#endif
-
 
 #include <QNetworkRequest>
 #include <QNetworkReply>
@@ -77,8 +72,8 @@
 #define ERR(message) QGS_ERROR_MESSAGE(message,"WMS provider")
 #define QGS_ERROR(message) QgsError(message,"WMS provider")
 
-static QString WMS_KEY = QStringLiteral( "wms" );
-static QString WMS_DESCRIPTION = QStringLiteral( "OGC Web Map Service version 1.3 data provider" );
+QString QgsWmsProvider::WMS_KEY = QStringLiteral( "wms" );
+QString QgsWmsProvider::WMS_DESCRIPTION = QStringLiteral( "OGC Web Map Service version 1.3 data provider" );
 
 static QString DEFAULT_LATLON_CRS = QStringLiteral( "CRS:84" );
 
@@ -447,7 +442,7 @@ bool QgsWmsProvider::setImageCrs( QString const &crs )
       break;
     }
 
-    QList<QVariant> resolutions;
+    mNativeResolutions.clear();
     if ( mCaps.mTileMatrixSets.contains( mSettings.mTileMatrixSetId ) )
     {
       mTileMatrixSet = &mCaps.mTileMatrixSets[ mSettings.mTileMatrixSetId ];
@@ -456,7 +451,7 @@ bool QgsWmsProvider::setImageCrs( QString const &crs )
       const auto constKeys = keys;
       for ( double key : constKeys )
       {
-        resolutions << key;
+        mNativeResolutions << key;
       }
       if ( !mTileMatrixSet->tileMatrices.empty() )
       {
@@ -469,8 +464,6 @@ bool QgsWmsProvider::setImageCrs( QString const &crs )
       QgsDebugMsg( QStringLiteral( "Expected tile matrix set '%1' not found." ).arg( mSettings.mTileMatrixSetId ) );
       mTileMatrixSet = nullptr;
     }
-
-    setProperty( "resolutions", resolutions );
 
     if ( !mTileLayer || !mTileMatrixSet )
     {
@@ -567,7 +560,7 @@ void QgsWmsProvider::fetchOtherResTiles( QgsTileMode tileMode, const QgsRectangl
                 ( viewExtent.yMaximum() - r.rect.bottom() ) / cr,
                 r.rect.width() / cr,
                 r.rect.height() / cr );
-    otherResTiles << TileImage( dst, localImage );
+    otherResTiles << TileImage( dst, localImage, false );
 
     // see if there are any missing rects that are completely covered by this tile
     const auto constMissingRects = missingRects;
@@ -659,7 +652,11 @@ QImage *QgsWmsProvider::draw( QgsRectangle const &viewExtent, int pixelWidth, in
     {
       Q_ASSERT( mTileLayer );
       Q_ASSERT( mTileMatrixSet );
-      Q_ASSERT( !mTileMatrixSet->tileMatrices.isEmpty() );
+      if ( mTileMatrixSet->tileMatrices.isEmpty() )
+      {
+        QgsDebugMsg( QStringLiteral( "WMTS tile set is empty!" ) );
+        return image;
+      }
 
       // if we know both source and output DPI, let's scale the tiles
       if ( mDpi != -1 && mTileLayer->dpi != -1 )
@@ -784,12 +781,13 @@ QImage *QgsWmsProvider::draw( QgsRectangle const &viewExtent, int pixelWidth, in
       if ( QgsTileCache::tile( r.url, localImage ) )
       {
         double cr = viewExtent.width() / image->width();
-
         QRectF dst( ( r.rect.left() - viewExtent.xMinimum() ) / cr,
                     ( viewExtent.yMaximum() - r.rect.bottom() ) / cr,
                     r.rect.width() / cr,
                     r.rect.height() / cr );
-        tileImages << TileImage( dst, localImage );
+        // if image size is "close enough" to destination size, don't smooth it out. Instead try for pixel-perfect placement!
+        bool disableSmoothing = ( qgsDoubleNear( dst.width(), tm->tileWidth, 2 ) && qgsDoubleNear( dst.height(), tm->tileHeight, 2 ) );
+        tileImages << TileImage( dst, localImage, !disableSmoothing );
       }
       else
       {
@@ -851,7 +849,7 @@ QImage *QgsWmsProvider::draw( QgsRectangle const &viewExtent, int pixelWidth, in
     const auto constTileImages = tileImages;
     for ( const TileImage &ti : constTileImages )
     {
-      if ( mSettings.mSmoothPixmapTransform )
+      if ( ti.smooth && mSettings.mSmoothPixmapTransform )
         p.setRenderHint( QPainter::SmoothPixmapTransform, true );
       p.drawImage( ti.rect, ti.img );
 
@@ -958,9 +956,9 @@ QUrl QgsWmsProvider::createRequestUrlWMS( const QgsRectangle &viewExtent, int pi
     ++it2;
   }
 
-  QString layers = visibleLayers.join( QStringLiteral( "," ) );
+  QString layers = visibleLayers.join( ',' );
   layers = layers.isNull() ? QString() : layers;
-  QString styles = visibleStyles.join( QStringLiteral( "," ) );
+  QString styles = visibleStyles.join( ',' );
   styles = styles.isNull() ? QString() : styles;
 
   QgsDebugMsg( "Visible layer list of " + layers + " and style list of " + styles );
@@ -2206,6 +2204,20 @@ QString QgsWmsProvider::htmlMetadata()
       metadata += QLatin1String( "</th></tr>" );
 
       metadata += QLatin1String( "<tr><td class=\"strong\">" );
+      metadata += tr( "Title" );
+      metadata += QLatin1String( "</td>" );
+      metadata += QLatin1String( "<td>" );
+      metadata += l.title;
+      metadata += QLatin1String( "</td></tr>" );
+
+      metadata += QLatin1String( "<tr><td class=\"strong\">" );
+      metadata += tr( "Abstract" );
+      metadata += QLatin1String( "</td>" );
+      metadata += QLatin1String( "<td>" );
+      metadata += l.abstract;
+      metadata += QLatin1String( "</td></tr>" );
+
+      metadata += QLatin1String( "<tr><td class=\"strong\">" );
       metadata += tr( "Selected" );
       metadata += QLatin1String( "</td>" );
       metadata += QLatin1String( "<td class=\"strong\">" );
@@ -2300,11 +2312,8 @@ QString QgsWmsProvider::htmlMetadata()
                         tr( "Bottom" ),
                         tr( "Right" ) );
 
-      const auto constToList = property( "resolutions" ).toList();
-      for ( const QVariant &res : constToList )
+      for ( const double key : mNativeResolutions )
       {
-        double key = res.toDouble();
-
         QgsWmtsTileMatrix &tm = mTileMatrixSet->tileMatrices[ key ];
 
         double tw = key * tm.tileWidth;
@@ -3235,6 +3244,11 @@ bool QgsWmsProvider::renderInPreview( const QgsDataProvider::PreviewContext &con
   return QgsRasterDataProvider::renderInPreview( context );
 }
 
+QList<double> QgsWmsProvider::nativeResolutions() const
+{
+  return mNativeResolutions;
+}
+
 QVector<QgsWmsSupportedFormat> QgsWmsProvider::supportedFormats()
 {
   QVector<QgsWmsSupportedFormat> formats;
@@ -3528,42 +3542,10 @@ void QgsWmsProvider::getLegendGraphicReplyProgress( qint64 bytesReceived, qint64
   emit statusChanged( msg );
 }
 
-
-
-/**
- * Class factory to return a pointer to a newly created
- * QgsWmsProvider object
- */
-QGISEXTERN QgsWmsProvider *classFactory( const QString *uri, const QgsDataProvider::ProviderOptions &options )
+QgsWmsProvider *QgsWmsProviderMetadata::createProvider( const QString &uri, const QgsDataProvider::ProviderOptions &options )
 {
-  return new QgsWmsProvider( *uri, options );
+  return new QgsWmsProvider( uri, options );
 }
-
-/**
- * Required key function (used to map the plugin to a data store type)
-*/
-QGISEXTERN QString providerKey()
-{
-  return WMS_KEY;
-}
-
-/**
- * Required description function
- */
-QGISEXTERN QString description()
-{
-  return WMS_DESCRIPTION;
-}
-
-/**
- * Required isProvider function. Used to determine if this shared library
- * is a data provider plugin
- */
-QGISEXTERN bool isProvider()
-{
-  return true;
-}
-
 
 // -----------------
 
@@ -3949,9 +3931,12 @@ void QgsWmsTiledImageDownloadHandler::tileReplyFinished()
       if ( !myLocalImage.isNull() )
       {
         QPainter p( mImage );
-        if ( mSmoothPixmapTransform )
+        // if image size is "close enough" to destination size, don't smooth it out. Instead try for pixel-perfect placement!
+        const bool disableSmoothing = ( qgsDoubleNear( dst.width(), myLocalImage.width(), 2 ) && qgsDoubleNear( dst.height(), myLocalImage.height(), 2 ) );
+        if ( !disableSmoothing && mSmoothPixmapTransform )
           p.setRenderHint( QPainter::SmoothPixmapTransform, true );
         p.drawImage( dst, myLocalImage );
+        p.end();
 #if 0
         myLocalImage.save( QString( "%1/%2-tile-%3.png" ).arg( QDir::tempPath() ).arg( mTileReqNo ).arg( tileNo ) );
         p.drawRect( dst ); // show tile bounds
@@ -4104,6 +4089,11 @@ void QgsWmsProvider::setSRSQueryItem( QUrl &url )
   setQueryItem( url, crsKey, mImageCrs );
 }
 
+bool QgsWmsProvider::ignoreExtents() const
+{
+  return mSettings.mIgnoreReportedLayerExtents;
+}
+
 // ----------
 
 QgsWmsLegendDownloadHandler::QgsWmsLegendDownloadHandler( QgsNetworkAccessManager &networkAccessManager, const QgsWmsSettings &settings, const QUrl &url )
@@ -4253,32 +4243,26 @@ void QgsCachedImageFetcher::start()
 }
 
 
-#ifdef HAVE_GUI
+// -----------------------
 
-//! Provider for WMS layers source select
-class QgsWmsSourceSelectProvider : public QgsSourceSelectProvider
+
+QgsWmsProviderMetadata::QgsWmsProviderMetadata()
+  : QgsProviderMetadata( QgsWmsProvider::WMS_KEY, QgsWmsProvider::WMS_DESCRIPTION )
 {
-  public:
+}
 
-    QString providerKey() const override { return QStringLiteral( "wms" ); }
-    QString text() const override { return QStringLiteral( "WMS/WMTS" ); } // untranslatable string as acronym for this particular case. Use QObject::tr() otherwise
-    int ordering() const override { return QgsSourceSelectProvider::OrderRemoteProvider + 10; }
-    QIcon icon() const override { return QgsApplication::getThemeIcon( QStringLiteral( "/mActionAddWmsLayer.svg" ) ); }
-    QgsAbstractDataSourceWidget *createDataSourceWidget( QWidget *parent = nullptr, Qt::WindowFlags fl = Qt::Widget, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::Embedded ) const override
-    {
-      return new QgsWMSSourceSelect( parent, fl, widgetMode );
-    }
-};
-
-
-QGISEXTERN QList<QgsSourceSelectProvider *> *sourceSelectProviders()
+QList<QgsDataItemProvider *> QgsWmsProviderMetadata::dataItemProviders() const
 {
-  QList<QgsSourceSelectProvider *> *providers = new QList<QgsSourceSelectProvider *>();
+  QList<QgsDataItemProvider *> providers;
 
-  *providers
-      << new QgsWmsSourceSelectProvider;
+  providers
+      << new QgsWmsDataItemProvider
+      << new QgsXyzTileDataItemProvider;
 
   return providers;
 }
-#endif
 
+QGISEXTERN QgsProviderMetadata *providerMetadataFactory()
+{
+  return new QgsWmsProviderMetadata();
+}

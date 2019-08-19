@@ -50,7 +50,7 @@ void QgsLayerTreeViewIndicatorProvider::onAddedChildren( QgsLayerTreeNode *node,
     }
     else if ( QgsLayerTree::isLayer( childNode ) )
     {
-      if ( QgsLayerTreeLayer *layerNode = dynamic_cast< QgsLayerTreeLayer * >( childNode ) )
+      if ( QgsLayerTreeLayer *layerNode = qobject_cast< QgsLayerTreeLayer * >( childNode ) )
       {
         if ( layerNode->layer() )
         {
@@ -99,7 +99,7 @@ void QgsLayerTreeViewIndicatorProvider::onLayerLoaded()
   if ( !( qobject_cast<QgsVectorLayer *>( layerNode->layer() ) || qobject_cast<QgsRasterLayer *>( layerNode->layer() ) ) )
     return;
 
-  if ( QgsMapLayer *mapLayer = qobject_cast<QgsMapLayer *>( layerNode->layer() ) )
+  if ( QgsMapLayer *mapLayer = layerNode->layer() )
   {
     if ( mapLayer )
     {
@@ -115,6 +115,27 @@ void QgsLayerTreeViewIndicatorProvider::onLayerChanged()
   if ( !layer )
     return;
 
+  updateLayerIndicator( layer );
+}
+
+void QgsLayerTreeViewIndicatorProvider::connectSignals( QgsMapLayer *layer )
+{
+  if ( !( qobject_cast<QgsVectorLayer *>( layer ) || qobject_cast<QgsRasterLayer *>( layer ) ) )
+    return;
+  QgsMapLayer *mapLayer = layer;
+  connect( mapLayer, &QgsMapLayer::dataSourceChanged, this, &QgsLayerTreeViewIndicatorProvider::onLayerChanged );
+}
+
+void QgsLayerTreeViewIndicatorProvider::disconnectSignals( QgsMapLayer *layer )
+{
+  if ( !( qobject_cast<QgsVectorLayer *>( layer ) || qobject_cast<QgsRasterLayer *>( layer ) ) )
+    return;
+  QgsMapLayer *mapLayer = layer;
+  disconnect( mapLayer, &QgsMapLayer::dataSourceChanged, this, &QgsLayerTreeViewIndicatorProvider::onLayerChanged );
+}
+
+void QgsLayerTreeViewIndicatorProvider::updateLayerIndicator( QgsMapLayer *layer )
+{
   // walk the tree and find layer node that needs to be updated
   const QList<QgsLayerTreeLayer *> layerNodes = mLayerTreeView->layerTreeModel()->rootGroup()->findLayers();
   for ( QgsLayerTreeLayer *node : layerNodes )
@@ -125,22 +146,6 @@ void QgsLayerTreeViewIndicatorProvider::onLayerChanged()
       break;
     }
   }
-}
-
-void QgsLayerTreeViewIndicatorProvider::connectSignals( QgsMapLayer *layer )
-{
-  if ( !( qobject_cast<QgsVectorLayer *>( layer ) || qobject_cast<QgsRasterLayer *>( layer ) ) )
-    return;
-  QgsMapLayer *mapLayer = qobject_cast<QgsMapLayer *>( layer );
-  connect( mapLayer, &QgsMapLayer::dataSourceChanged, this, &QgsLayerTreeViewIndicatorProvider::onLayerChanged );
-}
-
-void QgsLayerTreeViewIndicatorProvider::disconnectSignals( QgsMapLayer *layer )
-{
-  if ( !( qobject_cast<QgsVectorLayer *>( layer ) || qobject_cast<QgsRasterLayer *>( layer ) ) )
-    return;
-  QgsMapLayer *mapLayer = qobject_cast<QgsMapLayer *>( layer );
-  disconnect( mapLayer, &QgsMapLayer::dataSourceChanged, this, &QgsLayerTreeViewIndicatorProvider::onLayerChanged );
 }
 
 std::unique_ptr< QgsLayerTreeViewIndicator > QgsLayerTreeViewIndicatorProvider::newIndicator( QgsMapLayer *layer )

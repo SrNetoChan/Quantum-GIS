@@ -75,6 +75,7 @@ Base class for raster data providers.
       NoProviderCapabilities,
       ReadLayerMetadata,
       WriteLayerMetadata,
+      ProviderHintBenefitsFromResampling
     };
 
     typedef QFlags<QgsRasterDataProvider::ProviderCapability> ProviderCapabilities;
@@ -466,6 +467,24 @@ Step height for raster iterations.
 .. seealso:: :py:func:`stepWidth`
 
 .. versionadded:: 3.0
+%End
+
+    virtual QList< double > nativeResolutions() const;
+%Docstring
+Returns a list of native resolutions if available, i.e. map units per pixel at which the raster source
+was originally created.
+
+Resolutions are calculated in the provider's crs().
+
+.. versionadded:: 3.8.0
+%End
+
+    virtual bool ignoreExtents() const;
+%Docstring
+Returns true if the extents reported by the data provider are not reliable
+and it's possible that there is renderable content outside of these extents.
+
+.. versionadded:: 3.10.0
 %End
 
   signals:

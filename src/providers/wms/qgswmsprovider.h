@@ -24,6 +24,7 @@
 #include "qgscoordinatereferencesystem.h"
 #include "qgsnetworkreplyparser.h"
 #include "qgswmscapabilities.h"
+#include "qgsprovidermetadata.h"
 
 #include <QString>
 #include <QStringList>
@@ -113,6 +114,9 @@ class QgsWmsProvider : public QgsRasterDataProvider
     Q_OBJECT
 
   public:
+
+    static QString WMS_KEY;
+    static QString WMS_DESCRIPTION;
 
     /**
      * Constructor for the provider.
@@ -210,6 +214,7 @@ class QgsWmsProvider : public QgsRasterDataProvider
     QString description() const override;
     void reloadData() override;
     bool renderInPreview( const QgsDataProvider::PreviewContext &context ) override;
+    QList< double > nativeResolutions() const override;
 
     static QVector<QgsWmsSupportedFormat> supportedFormats();
 
@@ -325,6 +330,8 @@ class QgsWmsProvider : public QgsRasterDataProvider
     /* \brief add SRS or CRS parameter */
     void setSRSQueryItem( QUrl &url );
 
+    bool ignoreExtents() const override;
+
   private:
 
     QUrl createRequestUrlWMS( const QgsRectangle &viewExtent, int pixelWidth, int pixelHeight );
@@ -335,9 +342,10 @@ class QgsWmsProvider : public QgsRasterDataProvider
     //! Helper structure to store a cached tile image with its rectangle
     typedef struct TileImage
     {
-      TileImage( const QRectF &r, const QImage &i ): rect( r ), img( i ) {}
+      TileImage( const QRectF &r, const QImage &i, bool smooth ): rect( r ), img( i ), smooth( smooth ) {}
       QRectF rect; //!< Destination rectangle for a tile (in screen coordinates)
       QImage img;  //!< Cached tile to be drawn
+      bool smooth; //!< Whether to use antialiasing/smooth transforms when rendering tile
     } TileImage;
     //! Gets tiles from a different resolution to cover the missing areas
     void fetchOtherResTiles( QgsTileMode tileMode, const QgsRectangle &viewExtent, int imageWidth, QList<QRectF> &missing, double tres, int resOffset, QList<TileImage> &otherResTiles );
@@ -462,6 +470,8 @@ class QgsWmsProvider : public QgsRasterDataProvider
     //! User's settings (URI, authorization, layer, style, ...)
     QgsWmsSettings mSettings;
 
+    QList< double > mNativeResolutions;
+
     friend class TestQgsWmsProvider;
 
 };
@@ -563,6 +573,14 @@ class QgsWmsStatistics
 };
 
 Q_DECLARE_TYPEINFO( QgsWmsProvider::TilePosition, Q_PRIMITIVE_TYPE );
+
+class QgsWmsProviderMetadata: public QgsProviderMetadata
+{
+  public:
+    QgsWmsProviderMetadata();
+    QgsWmsProvider *createProvider( const QString &uri, const QgsDataProvider::ProviderOptions &options ) override;
+    QList<QgsDataItemProvider *> dataItemProviders() const override;
+};
 
 #endif
 

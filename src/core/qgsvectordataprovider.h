@@ -32,6 +32,7 @@ class QTextCodec;
 #include "qgsrelation.h"
 #include "qgsfeaturesink.h"
 #include "qgsfeaturesource.h"
+#include "qgsfeaturerequest.h"
 
 typedef QList<int> QgsAttributeList SIP_SKIP;
 typedef QSet<int> QgsAttributeIds SIP_SKIP;
@@ -43,7 +44,6 @@ class QgsFeedback;
 class QgsFeatureRenderer;
 class QgsAbstractVectorLayerLabeling;
 
-#include "qgsfeaturerequest.h"
 
 /**
  * \ingroup core
@@ -239,6 +239,7 @@ class CORE_EXPORT QgsVectorDataProvider : public QgsDataProvider, public QgsFeat
      * \param parameters parameters controlling aggregate calculation
      * \param context expression context for filter
      * \param ok will be set to TRUE if calculation was successfully performed by the data provider
+     * \param fids list of fids to filter, otherwise will use all fids
      * \returns calculated aggregate value
      * \since QGIS 2.16
      */
@@ -246,7 +247,8 @@ class CORE_EXPORT QgsVectorDataProvider : public QgsDataProvider, public QgsFeat
                                 int index,
                                 const QgsAggregateCalculator::AggregateParameters &parameters,
                                 QgsExpressionContext *context,
-                                bool &ok ) const;
+                                bool &ok,
+                                QgsFeatureIds *fids = nullptr ) const;
 
     /**
      * Returns the possible enum values of an attribute. Returns an empty stringlist if a provider does not support enum types
@@ -598,6 +600,14 @@ class CORE_EXPORT QgsVectorDataProvider : public QgsDataProvider, public QgsFeat
      * \since QGIS 3.0
      */
     virtual bool hasMetadata() const { return true; }
+
+    /**
+     * Handles any post-clone operations required after this vector data provider was cloned
+     * from the \a source provider.
+     *
+     * \since QGIS 3.8.1
+     */
+    virtual void handlePostCloneOperations( QgsVectorDataProvider *source );
 
   signals:
 

@@ -196,12 +196,10 @@ class TestQgsJsonUtils(unittest.TestCase):
 
         expected = """{
   "bbox": [
-    [
-      5.0,
-      6.0,
-      15.0,
-      16.0
-    ]
+    5.0,
+    6.0,
+    15.0,
+    16.0
   ],
   "geometry": {
     "coordinates": [
@@ -789,7 +787,7 @@ class TestQgsJsonUtils(unittest.TestCase):
 
     def testExportFeaturesWithLocale_regression20053(self):
         """ Test exporting feature export with range widgets and locale different than C
-        Regression: https://issues.qgis.org/issues/20053 - decimal separator in csv files
+        Regression: https://github.com/qgis/QGIS/issues/27875 - decimal separator in csv files
         """
 
         source = QgsVectorLayer("Point?field=name:string&field=cost:double&field=population:int&field=date:date",

@@ -38,7 +38,8 @@ from qgis.core import (QgsMapLayer,
                        QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterVectorLayer,
                        QgsProcessingParameterMeshLayer,
-                       QgsProcessingParameterFeatureSource)
+                       QgsProcessingParameterFeatureSource,
+                       QgsProcessingParameterMapLayer)
 
 from processing.gui.MultipleInputDialog import MultipleInputDialog
 
@@ -109,6 +110,8 @@ class BatchInputSelectionPanel(QWidget):
             layers = QgsProcessingUtils.compatibleRasterLayers(QgsProject.instance())
         elif isinstance(self.param, QgsProcessingParameterVectorLayer):
             layers = QgsProcessingUtils.compatibleVectorLayers(QgsProject.instance())
+        elif isinstance(self.param, QgsProcessingParameterMapLayer):
+            layers = QgsProcessingUtils.compatibleLayers(QgsProject.instance())
         elif (isinstance(self.param, QgsProcessingParameterMeshLayer)
               or (isinstance(self.param, QgsProcessingParameterMultipleLayers) and
                   self.param.layerType() == QgsProcessing.TypeMesh)):
@@ -221,7 +224,7 @@ class BatchInputSelectionPanel(QWidget):
         self._value = self.text.text()
         self.valueChanged.emit()
 
-    def value(self):
+    def getValue(self):
         return self._value if self._value else None
 
     def setValue(self, value):

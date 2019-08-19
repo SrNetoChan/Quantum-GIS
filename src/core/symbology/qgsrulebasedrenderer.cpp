@@ -27,6 +27,7 @@
 #include "qgspainteffect.h"
 #include "qgspainteffectregistry.h"
 #include "qgsproperty.h"
+#include "qgsstyleentityvisitor.h"
 
 #include <QSet>
 
@@ -155,6 +156,34 @@ void QgsRuleBasedRenderer::Rule::setIsElse( bool iselse )
   mFilter.reset();
 }
 
+bool QgsRuleBasedRenderer::Rule::accept( QgsStyleEntityVisitorInterface *visitor ) const
+{
+  // NOTE: if visitEnter returns false it means "don't visit the rule", not "abort all further visitations"
+  if ( mParent && !visitor->visitEnter( QgsStyleEntityVisitorInterface::Node( QgsStyleEntityVisitorInterface::NodeType::SymbolRule, mRuleKey, mLabel ) ) )
+    return true;
+
+  if ( mSymbol )
+  {
+    QgsStyleSymbolEntity entity( mSymbol.get() );
+    if ( !visitor->visit( QgsStyleEntityVisitorInterface::StyleLeaf( &entity ) ) )
+      return false;
+  }
+
+  if ( !mChildren.empty() )
+  {
+    for ( const Rule *rule : mChildren )
+    {
+
+      if ( !rule->accept( visitor ) )
+        return false;
+    }
+  }
+
+  if ( mParent && !visitor->visitExit( QgsStyleEntityVisitorInterface::Node( QgsStyleEntityVisitorInterface::NodeType::SymbolRule, mRuleKey, mLabel ) ) )
+    return false;
+
+  return true;
+}
 
 QString QgsRuleBasedRenderer::Rule::dump( int indent ) const
 {
@@ -423,7 +452,7 @@ bool QgsRuleBasedRenderer::Rule::startRender( QgsRenderContext &context, const Q
       sf = QStringLiteral( "TRUE" );
     }
     // If we have more than 50 rules (to stay on the safe side) make a binary tree or SQLITE will fail,
-    // see: http://issues.qgis.org/issues/19441
+    // see: https://github.com/qgis/QGIS/issues/27269
     else if ( subfilters.count() > 50 )
     {
       std::function<QString( const QStringList & )>bt = [ &bt ]( const QStringList & subf )
@@ -1262,6 +1291,11 @@ QgsSymbolList QgsRuleBasedRenderer::originalSymbolsForFeature( const QgsFeature 
 QSet< QString > QgsRuleBasedRenderer::legendKeysForFeature( const QgsFeature &feature, QgsRenderContext &context ) const
 {
   return mRootRule->legendKeysForFeature( feature, &context );
+}
+
+bool QgsRuleBasedRenderer::accept( QgsStyleEntityVisitorInterface *visitor ) const
+{
+  return mRootRule->accept( visitor );
 }
 
 QgsRuleBasedRenderer *QgsRuleBasedRenderer::convertFromRenderer( const QgsFeatureRenderer *renderer )

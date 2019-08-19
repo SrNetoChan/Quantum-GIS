@@ -21,7 +21,7 @@
 #include "qgis_gui.h"
 #include "qgsmaplayer.h"
 #include "qgsmimedatautils.h"
-#include "qgsbrowsermodel.h"
+#include "qgsbrowserguimodel.h"
 #include "qgsbrowserproxymodel.h"
 
 #include <QObject>
@@ -56,9 +56,9 @@ class GUI_EXPORT QgsDataSourceSelectDialog: public QDialog, private Ui::QgsDataS
      * \param layerType sets the layer type filter, this is in effect only if filtering by layer type is also active
      * \param parent the object
      */
-    QgsDataSourceSelectDialog( QgsBrowserModel *browserModel = nullptr,
+    QgsDataSourceSelectDialog( QgsBrowserGuiModel *browserModel = nullptr,
                                bool setFilterByLayerType = false,
-                               const QgsMapLayerType &layerType = QgsMapLayerType::VectorLayer,
+                               QgsMapLayerType layerType = QgsMapLayerType::VectorLayer,
                                QWidget *parent = nullptr );
 
 
@@ -75,7 +75,7 @@ class GUI_EXPORT QgsDataSourceSelectDialog: public QDialog, private Ui::QgsDataS
      * \note the description will be displayed at the bottom of the dialog
      * \since 3.8
      */
-    void setDescription( const QString description );
+    void setDescription( const QString &description );
 
     /**
      * Returns the (possibly invalid) uri of the selected data source
@@ -98,13 +98,15 @@ class GUI_EXPORT QgsDataSourceSelectDialog: public QDialog, private Ui::QgsDataS
     //! Triggered when a layer is selected in the browser
     void onLayerSelected( const QModelIndex &index );
 
+    void itemDoubleClicked( const QModelIndex &index );
+
   private:
 
     //! Refresh the model
     void refreshModel( const QModelIndex &index );
 
     QgsBrowserProxyModel mBrowserProxyModel;
-    std::unique_ptr<QgsBrowserModel> mBrowserModel;
+    std::unique_ptr<QgsBrowserGuiModel> mBrowserModel;
     bool mOwnModel = true;
     QgsMimeDataUtils::Uri mUri;
     QLabel *mDescriptionLabel = nullptr;

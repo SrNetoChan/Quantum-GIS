@@ -329,7 +329,7 @@ class CORE_EXPORT QgsSettings : public QObject
         QgsDebugMsg( QStringLiteral( "Invalid metaenum. Enum probably misses Q_ENUM or Q_FLAG declaration." ) );
       }
 
-      T v;
+      T v = defaultValue;
       bool ok = false;
 
       if ( metaEnum.isValid() )
@@ -347,7 +347,7 @@ class CORE_EXPORT QgsSettings : public QObject
         v = T( value( key, static_cast<int>( defaultValue ), section ).toInt( &ok ) );
         if ( metaEnum.isValid() )
         {
-          if ( !ok || !metaEnum.valueToKeys( static_cast<int>( v ) ).size() )
+          if ( !ok || metaEnum.valueToKeys( static_cast<int>( v ) ).isEmpty() )
           {
             v = defaultValue;
           }

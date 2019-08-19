@@ -24,7 +24,7 @@
 
 #ifndef SIP_RUN
 #include <nlohmann/json_fwd.hpp>
-using json = nlohmann::json;
+using namespace nlohmann;
 #endif
 
 #include <QPointer>
@@ -213,7 +213,7 @@ class CORE_EXPORT QgsJsonExporter
      * \param extraProperties map of extra attributes to include in feature's properties
      * \param id optional ID to use as GeoJSON feature's ID instead of input feature's ID. If omitted, feature's
      * ID is used.
-     * \returns QJsonObject
+     * \returns json object
      * \see exportFeatures()
      */
     json exportFeatureToJsonObject( const QgsFeature &feature,
@@ -229,6 +229,15 @@ class CORE_EXPORT QgsJsonExporter
      * \see exportFeature()
      */
     QString exportFeatures( const QgsFeatureList &features, int indent = -1 ) const;
+
+    /**
+     * Returns a JSON object representation of a list of features (feature collection).
+     * \param features features to convert
+     * \returns json object
+     * \see exportFeatures()
+     * \since QGIS 3.10
+     */
+    json exportFeaturesToJsonObject( const QgsFeatureList &features ) const SIP_SKIP;
 
   private:
 
@@ -345,6 +354,19 @@ class CORE_EXPORT QgsJsonUtils
      */
     static json jsonFromVariant( const QVariant &v ) SIP_SKIP;
 
+    /**
+     * Converts JSON \a jsonString to a QVariant, in case of parsing error an invalid QVariant is returned.
+     * \note Not available in Python bindings
+     * \since QGIS 3.8
+     */
+    static QVariant parseJson( const std::string &jsonString ) SIP_SKIP;
+
+    /**
+     * Converts JSON \a jsonString to a QVariant, in case of parsing error an invalid QVariant is returned.
+     * \note Not available in Python bindings
+     * \since QGIS 3.8
+     */
+    static QVariant parseJson( const QString &jsonString ) SIP_SKIP;
 
 };
 

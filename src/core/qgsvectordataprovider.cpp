@@ -466,13 +466,14 @@ QStringList QgsVectorDataProvider::uniqueStringsMatching( int index, const QStri
 }
 
 QVariant QgsVectorDataProvider::aggregate( QgsAggregateCalculator::Aggregate aggregate, int index,
-    const QgsAggregateCalculator::AggregateParameters &parameters, QgsExpressionContext *context, bool &ok ) const
+    const QgsAggregateCalculator::AggregateParameters &parameters, QgsExpressionContext *context, bool &ok, QgsFeatureIds *fids ) const
 {
   //base implementation does nothing
   Q_UNUSED( aggregate )
   Q_UNUSED( index )
   Q_UNUSED( parameters )
   Q_UNUSED( context )
+  Q_UNUSED( fids )
 
   ok = false;
   return QVariant();
@@ -839,4 +840,9 @@ QStringList QgsVectorDataProvider::sEncodings;
 QList<QgsRelation> QgsVectorDataProvider::discoverRelations( const QgsVectorLayer *, const QList<QgsVectorLayer *> & ) const
 {
   return QList<QgsRelation>();
+}
+
+void QgsVectorDataProvider::handlePostCloneOperations( QgsVectorDataProvider * )
+{
+
 }

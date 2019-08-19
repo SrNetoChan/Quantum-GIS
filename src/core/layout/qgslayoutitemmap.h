@@ -24,8 +24,10 @@
 #include "qgsmaprenderercustompainterjob.h"
 #include "qgslayoutitemmapgrid.h"
 #include "qgslayoutitemmapoverview.h"
+#include "qgsmaprendererstagedrenderjob.h"
 
 class QgsAnnotation;
+class QgsRenderedFeatureHandlerInterface;
 
 /**
  * \ingroup core
@@ -69,7 +71,8 @@ class CORE_EXPORT QgsLayoutItemMap : public QgsLayoutItem
      */
     enum MapItemFlag
     {
-      ShowPartialLabels  = 1 << 0,  //!< Whether to draw labels which are partially outside of the map view
+      ShowPartialLabels  = 1 << 0, //!< Whether to draw labels which are partially outside of the map view
+      ShowUnplacedLabels = 1 << 1, //!< Whether to render unplaced labels in the map view
     };
     Q_DECLARE_FLAGS( MapItemFlags, MapItemFlag )
 
@@ -114,7 +117,12 @@ class CORE_EXPORT QgsLayoutItemMap : public QgsLayoutItem
 
     // for now, map items behave a bit differently and don't implement draw. TODO - see if we can avoid this
     void paint( QPainter *painter, const QStyleOptionGraphicsItem *itemStyle, QWidget *pWidget ) override;
-    int numberExportLayers() const override;
+    Q_DECL_DEPRECATED int numberExportLayers() const override SIP_DEPRECATED;
+    void startLayeredExport() override;
+    void stopLayeredExport() override;
+    bool nextExportPart() override;
+    ExportLayerBehavior exportLayerBehavior() const override;
+    QgsLayoutItem::ExportLayerDetail exportLayerDetails() const override;
     void setFrameStrokeWidth( QgsLayoutMeasurement width ) override;
 
     /**
@@ -517,6 +525,30 @@ class CORE_EXPORT QgsLayoutItemMap : public QgsLayoutItem
      */
     QgsMapRendererJob::Errors renderingErrors() const { return mRenderingErrors; }
 
+    bool accept( QgsStyleEntityVisitorInterface *visitor ) const override;
+
+    /**
+     * Adds a rendered feature \a handler to use while rendering the map.
+     *
+     * Ownership of \a handler is NOT transferred, and it is the caller's responsibility to ensure
+     * that the handler exists for as long as it is registered with the map item.
+     *
+     * Callers should call removeRenderedFeatureHandler() to remove the handler before
+     * destroying the \a handler.
+     *
+     * \see removeRenderedFeatureHandler()
+     * \since QGIS 3.10
+     */
+    void addRenderedFeatureHandler( QgsRenderedFeatureHandlerInterface *handler );
+
+    /**
+     * Removes a previously added rendered feature \a handler.
+     *
+     * \see addRenderedFeatureHandler()
+     * \since QGIS 3.10
+     */
+    void removeRenderedFeatureHandler( QgsRenderedFeatureHandlerInterface *handler );
+
   protected:
 
     void draw( QgsLayoutItemRenderContext &context ) override;
@@ -735,6 +767,10 @@ class CORE_EXPORT QgsLayoutItemMap : public QgsLayoutItem
     //!layer id / error message
     QgsMapRendererJob::Errors mRenderingErrors;
 
+    QList< QgsRenderedFeatureHandlerInterface * > mRenderedFeatureHandlers;
+
+    std::unique_ptr< QgsMapRendererStagedRenderJob > mStagedRendererJob;
+
     void init();
 
     //! Resets the item tooltip to reflect current map id
@@ -765,16 +801,21 @@ class CORE_EXPORT QgsLayoutItemMap : public QgsLayoutItem
 
     enum PartType
     {
+      Start,
       Background,
       Layer,
       Grid,
       OverviewMapExtent,
       Frame,
-      SelectionBoxes
+      SelectionBoxes,
+      End,
+      NotLayered,
     };
 
     //! Test if a part of the item needs to be drawn, considering the context's current export layer
     bool shouldDrawPart( PartType part ) const;
+
+    PartType mCurrentExportPart = NotLayered;
 
     /**
      * Refresh the map's extents, considering data defined extent, scale and rotation
@@ -787,6 +828,8 @@ class CORE_EXPORT QgsLayoutItemMap : public QgsLayoutItem
     void updateAtlasFeature();
 
     QgsRectangle computeAtlasRectangle();
+
+    void createStagedRenderJob( const QgsRectangle &extent, const QSizeF size, double dpi );
 
     friend class QgsLayoutItemMapGrid;
     friend class QgsLayoutItemMapOverview;

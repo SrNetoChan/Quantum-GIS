@@ -298,12 +298,16 @@ class CORE_EXPORT QgsLayoutItemAttributeTable: public QgsLayoutTable
     bool writePropertiesToElement( QDomElement &elem, QDomDocument &doc, const QgsReadWriteContext &context ) const override;
     bool readPropertiesFromElement( const QDomElement &itemElem, const QDomDocument &doc, const QgsReadWriteContext &context ) override;
 
+  private slots:
+
+    void disconnectCurrentMap();
+
   private:
 
     //! Attribute source
     ContentSource mSource = LayerAttributes;
     //! Associated vector layer
-    QgsVectorLayerRef mVectorLayer;
+    QgsVectorLayerRef mVectorLayer = nullptr;
 
     //! Data defined vector layer - only
     QPointer< QgsVectorLayer > mDataDefinedVectorLayer;

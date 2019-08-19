@@ -70,7 +70,6 @@ namespace pal
       friend class LabelPosition;
 
     public:
-      enum LabelMode { LabelPerFeature, LabelPerFeaturePart };
       enum UpsideDownLabels
       {
         Upright, // upside-down labels (90 <= angle < 270) are shown upright
@@ -112,19 +111,6 @@ namespace pal
        * \see arrangement
        */
       void setArrangement( QgsPalLayerSettings::Placement arrangement ) { mArrangement = arrangement; }
-
-      /**
-       * Returns the layer's arrangement flags.
-       * \see setArrangementFlags
-       */
-      LineArrangementFlags arrangementFlags() const { return mArrangementFlags; }
-
-      /**
-       * Sets the layer's arrangement flags.
-       * \param flags arrangement flags
-       * \see arrangementFlags
-       */
-      void setArrangementFlags( LineArrangementFlags flags ) { mArrangementFlags = flags; }
 
       /**
        * \brief Sets whether the layer is currently active.
@@ -188,19 +174,6 @@ namespace pal
        * \see setPriority
        */
       double priority() const { return mDefaultPriority; }
-
-      /**
-       * Sets the layer's labeling mode.
-       * \param mode label mode
-       * \see labelMode
-       */
-      void setLabelMode( LabelMode mode ) { mMode = mode; }
-
-      /**
-       * Returns the layer's labeling mode.
-       * \see setLabelMode
-       */
-      LabelMode labelMode() const { return mMode; }
 
       /**
        * Sets whether connected lines should be merged before labeling
@@ -290,8 +263,7 @@ namespace pal
 
       //! Optional flags used for some placement methods
       QgsPalLayerSettings::Placement mArrangement;
-      LineArrangementFlags mArrangementFlags;
-      LabelMode mMode;
+
       bool mMergeLines;
 
       UpsideDownLabels mUpsidedownLabels;

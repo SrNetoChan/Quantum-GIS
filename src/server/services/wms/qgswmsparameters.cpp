@@ -223,6 +223,11 @@ namespace QgsWms
                                     QVariant( 0 ) );
     save( pQuality );
 
+    const QgsWmsParameter pTiled( QgsWmsParameter::TILED,
+                                  QVariant::Bool,
+                                  QVariant( false ) );
+    save( pTiled );
+
     const QgsWmsParameter pBoxSpace( QgsWmsParameter::BOXSPACE,
                                      QVariant::Double,
                                      QVariant( 2.0 ) );
@@ -944,6 +949,16 @@ namespace QgsWms
     return mWmsParameters[ QgsWmsParameter::IMAGE_QUALITY ].toInt();
   }
 
+  QString QgsWmsParameters::tiled() const
+  {
+    return mWmsParameters[ QgsWmsParameter::TILED ].toString();
+  }
+
+  bool QgsWmsParameters::tiledAsBool() const
+  {
+    return mWmsParameters[ QgsWmsParameter::TILED ].toBool();
+  }
+
   QString QgsWmsParameters::showFeatureCount() const
   {
     return mWmsParameters[ QgsWmsParameter::SHOWFEATURECOUNT ].toString();
@@ -1515,8 +1530,8 @@ namespace QgsWms
       if ( layerSelections.contains( layer ) )
       {
         QMultiMap<QString, QString>::const_iterator it;
-        it = layerSelections.find( layer );
-        while ( it != layerSelections.end() && it.key() == layer )
+        it = layerSelections.constFind( layer );
+        while ( it != layerSelections.constEnd() && it.key() == layer )
         {
           param.mSelection << it.value().split( ',' );
           ++it;
@@ -1584,9 +1599,9 @@ namespace QgsWms
     QList<QgsWmsParametersExternalLayer> externalLayers;
 
     QStringList layers = allLayersNickname();
-    QStringList::const_iterator rit = std::remove_if( layers.begin(), layers.end(), notExternalLayer );
+    QStringList::iterator rit = std::remove_if( layers.begin(), layers.end(), notExternalLayer );
 
-    for ( QStringList::const_iterator it = layers.begin(); it != rit; ++it )
+    for ( QStringList::iterator it = layers.begin(); it != rit; ++it )
     {
       externalLayers << externalLayerParameter( *it );
     }

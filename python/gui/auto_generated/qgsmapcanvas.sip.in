@@ -728,9 +728,27 @@ Repaints the canvas map
 
     void refreshAllLayers();
 %Docstring
-Reload all layers, clear the cache and refresh the canvas
+Reload all layers (including refreshing layer properties from their data sources),
+clears the cache and refreshes the canvas.
+
+.. note::
+
+   Consider using the less expensive redrawAllLayers() method if a layer reload
+   from the data provider is not required.
 
 .. versionadded:: 2.9
+%End
+
+    void redrawAllLayers();
+%Docstring
+Clears all cached images and redraws all layers.
+
+.. note::
+
+   Unlike refreshAllLayers(), this does NOT reload layers themselves, and accordingly
+   is more "lightweight". Use this method when only an update of the layer's renderers is required.
+
+.. versionadded:: 3.10
 %End
 
     void selectionChangedSlot();
@@ -950,6 +968,15 @@ Emitted when the canvas has been assigned a different map theme.
     void messageEmitted( const QString &title, const QString &message, Qgis::MessageLevel = Qgis::Info );
 %Docstring
 emit a message (usually to be displayed in a message bar)
+%End
+
+    void renderErrorOccurred( const QString &error, QgsMapLayer *layer );
+%Docstring
+Emitted whenever an error is encountered during a map render operation.
+
+The ``layer`` argument indicates the associated map layer, if available.
+
+.. versionadded:: 3.10.0
 %End
 
   protected:

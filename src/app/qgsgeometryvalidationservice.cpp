@@ -223,7 +223,7 @@ void QgsGeometryValidationService::enableLayerChecks( QgsVectorLayer *layer )
       precision = 8;
   }
 
-  checkInformation.context = qgis::make_unique<QgsGeometryCheckContext>( precision, mProject->crs(), mProject->transformContext() );
+  checkInformation.context = qgis::make_unique<QgsGeometryCheckContext>( precision, mProject->crs(), mProject->transformContext(), mProject );
 
   QList<QgsGeometryCheck *> layerChecks;
 
@@ -269,6 +269,14 @@ void QgsGeometryValidationService::enableLayerChecks( QgsVectorLayer *layer )
     {
       const QVariantMap checkConfiguration = layer->geometryOptions()->checkConfiguration( checkId );
       topologyChecks.append( factory->createGeometryCheck( checkInformation.context.get(), checkConfiguration ) );
+
+      if ( checkConfiguration.value( QStringLiteral( "allowedGapsEnabled" ) ).toBool() )
+      {
+        QgsVectorLayer *gapsLayer = QgsProject::instance()->mapLayer<QgsVectorLayer *>( checkConfiguration.value( "allowedGapsLayer" ).toString() );
+        connect( layer, &QgsVectorLayer::editingStarted, gapsLayer, [gapsLayer] { gapsLayer->startEditing(); } );
+        connect( layer, &QgsVectorLayer::beforeRollBack, gapsLayer, [gapsLayer] { gapsLayer->rollBack(); } );
+        connect( layer, &QgsVectorLayer::editingStopped, gapsLayer, [gapsLayer] { gapsLayer->commitChanges(); } );
+      }
     }
   }
 
@@ -422,9 +430,12 @@ void QgsGeometryValidationService::triggerTopologyChecks( QgsVectorLayer *layer 
 
   const QList<QgsGeometryCheck *> checks = mLayerChecks[layer].topologyChecks;
 
-  QMap<const QgsGeometryCheck *, QgsFeedback *> feedbacks;
+  QHash<const QgsGeometryCheck *, QgsFeedback *> feedbacks;
   for ( QgsGeometryCheck *check : checks )
+  {
     feedbacks.insert( check, new QgsFeedback() );
+    check->prepare( mLayerChecks[layer].context.get(), layer->geometryOptions()->checkConfiguration( check->id() ) );
+  }
 
   mLayerChecks[layer].topologyCheckFeedbacks = feedbacks.values();
 
@@ -481,7 +492,7 @@ void QgsGeometryValidationService::triggerTopologyChecks( QgsVectorLayer *layer 
     QgsReadWriteLocker errorLocker( mTopologyCheckLock, QgsReadWriteLocker::Read );
     layer->setAllowCommit( allErrors.empty() && mLayerChecks[layer].singleFeatureCheckErrors.empty() );
     errorLocker.unlock();
-    qDeleteAll( feedbacks.values() );
+    qDeleteAll( feedbacks );
     futureWatcher->deleteLater();
     if ( mLayerChecks[layer].topologyCheckFutureWatcher == futureWatcher )
       mLayerChecks[layer].topologyCheckFutureWatcher = nullptr;

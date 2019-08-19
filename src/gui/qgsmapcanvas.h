@@ -645,10 +645,25 @@ class GUI_EXPORT QgsMapCanvas : public QGraphicsView
     void refresh();
 
     /**
-     * Reload all layers, clear the cache and refresh the canvas
+     * Reload all layers (including refreshing layer properties from their data sources),
+     * clears the cache and refreshes the canvas.
+     *
+     * \note Consider using the less expensive redrawAllLayers() method if a layer reload
+     * from the data provider is not required.
+     *
      * \since QGIS 2.9
      */
     void refreshAllLayers();
+
+    /**
+     * Clears all cached images and redraws all layers.
+     *
+     * \note Unlike refreshAllLayers(), this does NOT reload layers themselves, and accordingly
+     * is more "lightweight". Use this method when only an update of the layer's renderers is required.
+     *
+     * \since QGIS 3.10
+     */
+    void redrawAllLayers();
 
     //! Receives signal about selection change, and pass it on with layer info
     void selectionChangedSlot();
@@ -836,6 +851,15 @@ class GUI_EXPORT QgsMapCanvas : public QGraphicsView
 
     //! emit a message (usually to be displayed in a message bar)
     void messageEmitted( const QString &title, const QString &message, Qgis::MessageLevel = Qgis::Info );
+
+    /**
+     * Emitted whenever an error is encountered during a map render operation.
+     *
+     * The \a layer argument indicates the associated map layer, if available.
+     *
+     * \since QGIS 3.10.0
+     */
+    void renderErrorOccurred( const QString &error, QgsMapLayer *layer );
 
   protected:
 

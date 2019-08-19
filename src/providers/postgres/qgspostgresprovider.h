@@ -23,6 +23,7 @@
 #include "qgsvectorlayerexporter.h"
 #include "qgspostgresconn.h"
 #include "qgsfields.h"
+#include "qgsprovidermetadata.h"
 #include <memory>
 
 class QgsFeature;
@@ -49,6 +50,10 @@ class QgsPostgresProvider : public QgsVectorDataProvider
     Q_OBJECT
 
   public:
+
+    static const QString POSTGRES_KEY;
+    static const QString POSTGRES_DESCRIPTION;
+
     enum Relkind
     {
       Unknown,
@@ -79,7 +84,7 @@ class QgsPostgresProvider : public QgsVectorDataProvider
       bool overwrite,
       QMap<int, int> *oldToNewAttrIdxMap,
       QString *errorMessage = nullptr,
-      const QMap<QString, QVariant> *coordinateTransformContext = nullptr
+      const QMap<QString, QVariant> *options = nullptr
     );
 
     /**
@@ -445,6 +450,8 @@ class QgsPostgresProvider : public QgsVectorDataProvider
 
     static QString quotedIdentifier( const QString &ident ) { return QgsPostgresConn::quotedIdentifier( ident ); }
     static QString quotedValue( const QVariant &value ) { return QgsPostgresConn::quotedValue( value ); }
+    static QString quotedJsonValue( const QVariant &value ) { return QgsPostgresConn::quotedJsonValue( value ); }
+    static QString quotedByteaValue( const QVariant &value );
 
     friend class QgsPostgresFeatureSource;
 
@@ -466,6 +473,9 @@ class QgsPostgresProvider : public QgsVectorDataProvider
 class QgsPostgresUtils
 {
   public:
+    static bool deleteLayer( const QString &uri, QString &errCause );
+    static bool deleteSchema( const QString &schema, const QgsDataSourceUri &uri, QString &errCause, bool cascade = false );
+
     static QString whereClause( QgsFeatureId featureId,
                                 const QgsFields &fields,
                                 QgsPostgresConn *conn,
@@ -486,7 +496,7 @@ class QgsPostgresUtils
 
     // We shift negative 32bit integers to above the max 32bit
     // positive integer to support the whole range of int32 values
-    // See https://issues.qgis.org/issues/14262
+    // See https://github.com/qgis/QGIS/issues/22258
     static qint64 int32pk_to_fid( qint32 x )
     {
       return x >= 0 ? x : x + INT32PK_OFFSET;
@@ -533,6 +543,35 @@ class QgsPostgresSharedData
     QMap<QVariantList, QgsFeatureId> mKeyToFid;      // map key values to feature id
     QMap<QgsFeatureId, QVariantList> mFidToKey;      // map feature id back to key values
     QMap<int, bool> mFieldSupportsEnumValues;        // map field index to bool flag supports enum values
+};
+
+class QgsPostgresProviderMetadata: public QgsProviderMetadata
+{
+  public:
+    QgsPostgresProviderMetadata();
+    QgsDataProvider *createProvider( const QString &uri, const QgsDataProvider::ProviderOptions &options ) override;
+    QList< QgsDataItemProvider * > dataItemProviders() const override;
+    QgsVectorLayerExporter::ExportError createEmptyLayer( const QString &uri, const QgsFields &fields, QgsWkbTypes::Type wkbType,
+        const QgsCoordinateReferenceSystem &srs,
+        bool overwrite,
+        QMap<int, int> &oldToNewAttrIdxMap, QString &errorMessage,
+        const QMap<QString, QVariant> *options ) override;
+    bool saveStyle( const QString &uri, const QString &qmlStyle, const QString &sldStyle, const QString &styleName,
+                    const QString &styleDescription, const QString &uiFileContent, bool useAsDefault, QString &errCause ) override;
+    QString loadStyle( const QString &uri, QString &errCause ) override;
+    int listStyles( const QString &uri, QStringList &ids,
+                    QStringList &names, QStringList &descriptions, QString &errCause ) override;
+    bool deleteStyleById( const QString &uri, QString styleId, QString &errCause ) override;
+    QString getStyleById( const QString &uri, QString styleId, QString &errCause ) override;
+    QgsTransaction *createTransaction( const QString &connString ) override;
+    QMap<QString, QgsAbstractProviderConnection *> connections( bool cached = true ) override;
+    QgsAbstractProviderConnection *createConnection( const QString &name ) override;
+    QgsAbstractProviderConnection *createConnection( const QString &name, const QString &uri ) override;
+    void deleteConnection( const QString &name ) override;
+    void saveConnection( QgsAbstractProviderConnection *createConnection, const QVariantMap &configuration = QVariantMap() ) override;
+    void initProvider() override;
+    void cleanupProvider() override;
+
 };
 
 // clazy:excludeall=qstring-allocations
